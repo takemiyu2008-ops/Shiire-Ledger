@@ -483,6 +483,9 @@ def test_ocr_flow(browser, base_url):
 
     # 1行ずつ並ぶ形
     r = page.evaluate('t => parseOcrText(t)', OCR_ROWS)
+    r2 = page.evaluate('t => parseOcrText(t)', '納品書\n玉葱\n人参\n4\n3\n味150\n味150\n味600\n味450\n味味味味\n味\n小計\n¥1,050\n¥84\n¥1,134')
+    check('「味」と読み違えた ¥ を直し、「味味味」は空行として捨てる',
+          [(i['name'], i['qty'], i['unitPrice'], i['amount']) for i in r2['items']] == [('玉葱', 4, 150, 600), ('人参', 3, 150, 450)] and r2['total'] == 1134, str(r2))
     check('1行ずつの形も解析できる', [(i['name'], i['qty'], i['unitPrice'], i['amount']) for i in r['items']] == [('玉葱', 4, 150, 600), ('胡瓜', 10, 180, 1800)]
           and (r['subtotal'], r['tax'], r['total']) == (2400, 192, 2592) and r['slipDate'] == '2026年10月2日', str(r))
     check('ページエラーなし（文字認識）', not errors, str(errors[:2]))

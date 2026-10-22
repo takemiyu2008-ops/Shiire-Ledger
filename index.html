@@ -235,6 +235,9 @@ a.btn{text-align:center; text-decoration:none;}
     <p class="hint">押すと iPhone のショートカット「仕入伝票」が動いてカメラが開きます。撮った写真は iPhone の中で文字にしてここへ届きます（写真は iPhone の外に出ません）。計算がすべて合えばそのまま登録し、合わない行があれば黄色で示します。<br>動かないときは、ショートカット「仕入伝票」がこの iPhone に入っているか確かめてください（作り方は SETUP.md）。</p>
     <label class="field" for="ocrText">読み取った文字</label>
     <textarea id="ocrText" rows="5" placeholder="iPhone の写真の「テキスト認識表示」で全部を選んでコピーし、ここに貼り付けてもよい"></textarea>
+    <div class="data-btns" style="margin-top:8px;">
+      <button class="btn secondary" id="btnCopyOcr">読み取った文字をコピー</button>
+    </div>
     <button class="btn" id="btnParse">この文字から入力欄を作る</button>
     <button class="btn secondary" id="btnManual">読み取らずに手入力</button>
     <div class="status-line" id="readStatus"></div>
@@ -785,7 +788,8 @@ const OCR_CONF_LOW = 0.5;
 function ocrTokens(text) {
   const tokens = [];
   String(text || '').split(/\r?\n/).forEach(line => {
-    const s = toHalf(line).replace(/[￥\\]/g, '¥').replace(/¥\s+/g, '¥').replace(/\s+/g, ' ').trim();
+    // iPhone のショートカットは「¥」を「味」と読み違えることがある（2026-10-22 実機）。数字の直前の「味」は ¥ に戻す
+    const s = toHalf(line).replace(/[￥\\]/g, '¥').replace(/味(?=\s*[\d,])/g, '¥').replace(/¥\s+/g, '¥').replace(/\s+/g, ' ').trim();
     if (!s) return;
     // 1行に 品名・数量・金額 が並ぶ形は空白で切る。日付・住所・電話の行は切らない
     if (/\d/.test(s) && / /.test(s) && !/年|月|日|TEL|FAX|〒|-/.test(s)) s.split(' ').forEach(t => tokens.push(t));
@@ -805,6 +809,7 @@ function parseOcrText(text) {
     if (d) { if (!out.slipDate) out.slipDate = d[0].replace(/\s/g, ''); return; }
     if (/有限会社|株式会社|合同会社|\((有|株)\)|㈲|㈱/.test(t) && !/セブン/.test(t)) { if (!out.supplier) out.supplier = t; return; }
     if (OCR_SKIP.test(t) || OCR_LABELS.has(t) || /納品書|返品伝票/.test(t)) return;
+    if (/^[味¥]+$/.test(t)) return; // 「¥0」の空行を「味」と読み違えたもの（列ごとまとめて「味味味…」になることもある）
     let m;
     if ((m = t.match(/^¥([\d,]+)$/))) { const v = parseInt(m[1].replace(/,/g, ''), 10); if (v) yens.push(v); return; } // ¥0 は空行
     if (/^\d{1,4}$/.test(t)) { qtys.push(parseInt(t, 10)); return; }
@@ -1863,6 +1868,13 @@ function activateTab(name) {
 document.querySelectorAll('nav.tabs button').forEach(btn => btn.addEventListener('click', () => activateTab(btn.dataset.tab)));
 
 document.getElementById('btnShoot').href = 'shortcuts://run-shortcut?name=' + encodeURIComponent(SHORTCUT_NAME);
+// 読み取った生の文字をコピーする（解析がうまくいかないときに、開発側へ渡すため）
+document.getElementById('btnCopyOcr').addEventListener('click', async () => {
+  const ta = document.getElementById('ocrText');
+  if (!ta.value.trim()) { toast('読み取った文字がありません'); return; }
+  try { await navigator.clipboard.writeText(ta.value); toast('コピーしました'); }
+  catch (e) { ta.focus(); ta.select(); ta.setSelectionRange(0, ta.value.length); document.execCommand('copy'); toast('コピーしました（できていなければ、選択された文字をコピーしてください）'); }
+});
 document.getElementById('btnParse').addEventListener('click', () => {
   const text = document.getElementById('ocrText').value;
   if (!text.trim()) { toast('読み取った文字を貼り付けてください'); return; }
