@@ -544,6 +544,9 @@ def test_ocr_flow(browser, base_url):
     check('「納品書」が読めなくても「納品」の語から種別を決める', r6['kind'] == '納品', str(r6['kind']))
     check('品名の頭のゴミ（「・1）を取り、末尾の「映映味味…」は品名にしない',
           [(i['name'], i['qty'], i['amount']) for i in r6['items']] == [('玉葱', 4, 600), ('胡瓜', 10, 1800), ('枝豆', 2, 500)], str(r6['items']))
+    r7 = page.evaluate('t => parseOcrText(t)', OCR_IPHONE.replace('有限会社 テスト青果', '有限会社 テスト青果\nC4 fJaiClei'))
+    check('表の見出しより前の崩れた数字（社印の読み違い「C4」）で行がずれない',
+          [(i['name'], i['qty'], i['amount']) for i in r7['items']] == [('玉葱', 4, 600), ('胡瓜', 10, 1800), ('枝豆', 2, 500)], str(r7['items']))
     r4 = page.evaluate('t => parseOcrText(t)', OCR_IPHONE.replace('·3,132', '·3,200'))
     check('合計金額と合わなければ小計・税は空欄のまま', r4['subtotal'] is None and r4['tax'] is None and r4['total'] == 3200, str(r4))
     check('1行ずつの形も解析できる', [(i['name'], i['qty'], i['unitPrice'], i['amount']) for i in r['items']] == [('玉葱', 4, 150, 600), ('胡瓜', 10, 180, 1800)]
@@ -567,7 +570,9 @@ def test_parser_real_samples(browser, base_url):
     pairs = [('ocr_nouhin_2026-10-01.txt', 'nouhin_2026-10-01.jpg'), ('ocr_henpin_2026-10-01.txt', 'henpin_2026-10-01.jpg'),
              ('ocr_iphone_nouhin_2026-10-01.txt', 'nouhin_2026-10-01.jpg'),   # 以下は iPhone のショートカットの実際の出力
              ('ocr_iphone2_nouhin_2026-10-01.txt', 'nouhin_2026-10-01.jpg'),  # 見出しの「産地」が「產地」になった回
-             ('ocr_iphone3_nouhin_2026-10-01.txt', 'nouhin_2026-10-01.jpg')]  # 「納品書」が読めず、品名の頭にゴミ、柿が「骈」の回
+             ('ocr_iphone3_nouhin_2026-10-01.txt', 'nouhin_2026-10-01.jpg'),  # 「納品書」が読めず、品名の頭にゴミ、柿が「骈」の回
+             ('ocr_iphone4_nouhin_2026-10-01.txt', 'nouhin_2026-10-01.jpg'),  # 列ごとに並んだ回（「残数数量」がつながる）
+             ('ocr_iphone_henpin_2026-10-01.txt', 'henpin_2026-10-01.jpg')]   # 返品伝票。見出しの前に社印の読み違い「C4」
     if not (samples / 'truth.json').exists() or not all((samples / a).exists() for a, _ in pairs):
         print('▼ 本物の伝票での解析: samples/ が無いので省略')
         return
@@ -585,7 +590,7 @@ def test_parser_real_samples(browser, base_url):
         check(f'{ocr}: 種別', r['kind'] == t['kind'])
         check(f'{ocr}: 小計・税・合計', (r['subtotal'], r['tax'], r['total']) == (t['subtotal'], t['tax'], t['total']))
         check(f'{ocr}: 品名の数', len(rows) == len(want))
-        if jpg.startswith('nouhin'):
+        if jpg.startswith('nouhin') or 'iphone' in ocr:
             check(f'{ocr}: 全行の数字が正解と一致', exact == len(want))
             check(f'{ocr}: 品名の読み違いは1つまで', len(name_ng) <= 1, str(name_ng))
         # 誤った値を入れていないこと（読めない値は空欄のまま）

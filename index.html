@@ -842,8 +842,9 @@ function parseOcrText(text) {
     if (/^\d{1,4}$/.test(t)) { qtys.push(parseInt(t, 10)); return; }
     if (/^[A-Za-z]{1,3}$/.test(t)) { originMarks++; return; }
     if (/\d/.test(t)) {
-      // 数字を含むが読めない（逆さ読み等）。「0夫」のような短い0だけのものは ¥0 の空行とみなす
-      if (/[1-9]/.test(t) || t.length > 2) yens.push(null);
+      // 数字を含むが読めない（逆さ読み等）。「0夫」のような短い0だけのものは ¥0 の空行とみなす。
+      // 表の見出しより前のもの（社印などの読み違い「C4」等。2026-10-22 実機）は表の外なので数えない
+      if (lastHeaderAt >= 0 && (/[1-9]/.test(t) || t.length > 2)) yens.push(null);
       return;
     }
     // 同じ数文字ばかりが続く長い語（¥0 の列を「映映味味妹妹…」と読み違えたもの）は捨てる
@@ -876,23 +877,26 @@ function parseOcrText(text) {
   // 品名が 単価・金額の組 より多いときは、末尾の余り（読み違えたゴミ）を落とした案も作る
   const pairs = Math.ceil(yens.length / 2);
   nameSets.slice().forEach(nm => { if (pairs && nm.length > pairs) nameSets.push(nm.slice(0, pairs)); });
-  nameSets.forEach(nm => {
+  // 金額の列の候補は「読めない金額も位置として数える」と「読めない金額を除く」（表の外の読み違いが紛れたとき用）
+  const yenSets = [yens];
+  if (yens.some(v => v == null)) yenSets.push(yens.filter(v => v != null));
+  nameSets.forEach(nm => yenSets.forEach(ys => {
     const n2 = nm.length;
     const aligned = qtys.length === n2;
     const cands = [];
-    if (yens.length >= n2) {
-      cands.push({ P: yens.slice(0, yens.length - n2), A: yens.slice(yens.length - n2) }); // 列ごと（金額の列を末尾に）
-      cands.push({ P: yens.slice(0, n2), A: yens.slice(n2) });                             // 列ごと（単価の列を先頭に）
+    if (ys.length >= n2) {
+      cands.push({ P: ys.slice(0, ys.length - n2), A: ys.slice(ys.length - n2) }); // 列ごと（金額の列を末尾に）
+      cands.push({ P: ys.slice(0, n2), A: ys.slice(n2) });                         // 列ごと（単価の列を先頭に）
     }
-    cands.push({ P: yens.filter((_, i) => i % 2 === 0), A: yens.filter((_, i) => i % 2 === 1) }); // 1行ずつ交互
+    cands.push({ P: ys.filter((_, i) => i % 2 === 0), A: ys.filter((_, i) => i % 2 === 1) }); // 1行ずつ交互
     cands.forEach(c => {
       const score = nm.reduce((sc, _, i) => {
         const q = divQty(c.P[i], c.A[i]);
         return sc + (q == null ? 0 : 1 + (aligned && qtys[i] === q ? 1 : 0));
       }, 0);
-      layouts.push({ names: nm, P: c.P, A: c.A, qtyAligned: aligned, score, gap: Math.abs(yens.length - 2 * n2) });
+      layouts.push({ names: nm, P: c.P, A: c.A, qtyAligned: aligned, score, gap: Math.abs(ys.length - 2 * n2) });
     });
-  });
+  }));
   // 点が同じなら、品名の数と金額の数（2個で1行）が釣り合うほうを選ぶ
   const best = layouts.reduce((a, b) => (b.score > a.score || (b.score === a.score && b.gap < a.gap) ? b : a));
   const n = best.names.length;
