@@ -467,6 +467,16 @@ def test_ocr_flow(browser, base_url):
     sb = page.text_content('#sumBody')
     check('月次: 3132−1814＝1,318円（取消した二重登録は除く）', '1,318円' in sb and '納品 1枚' in sb and '返品 1枚' in sb, sb[:200])
     check('月次: 「有限会社 テスト青果」と「(有)テスト青果」が同じ取引先', page.locator('#sumBody .sum-table tbody tr').count() == 1)
+    page.evaluate('window.__printed = 0; window.print = () => { window.__printed++; }; 0')
+    page.click('#printMonthly')
+    pa = page.text_content('#printArea')
+    check('印刷: 印刷ダイアログが呼ばれる', page.evaluate('window.__printed') == 1)
+    check('印刷: 見出し・差し引き 1,318円・伝票2枚', '月次のまとめ　2026年10月' in pa and '1,318円' in pa and page.locator('#printArea tbody tr').count() >= 4, pa[:200])
+    check('印刷: 取消した伝票は除き、その旨を書く', '取消した伝票 1枚は含めていません' in pa)
+    check('印刷: 画面には出ない', not page.locator('#printArea').is_visible())
+    page.emulate_media(media='print')
+    check('印刷: 印刷時は印刷用だけが見える', page.locator('#printArea').is_visible() and not page.locator('main').is_visible())
+    page.emulate_media(media='screen')
 
     # 1行ずつ並ぶ形
     r = page.evaluate('t => parseOcrText(t)', OCR_ROWS)

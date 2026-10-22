@@ -145,6 +145,36 @@ label.field{display:block; font-size:12px; color:var(--sub); margin:12px 0 4px;}
 .sum-table tr.total td{font-weight:700; border-bottom:none; border-top:2px solid var(--ink);}
 .sum-table .minus{color:var(--out);}
 .pay-big{font-size:26px; font-weight:700; margin:4px 0 2px;}
+/* 印刷（月次のまとめ・A4横）。画面には出さず、印刷のときだけ #printArea だけを出す */
+#printArea{display:none;}
+@media print{
+  @page{size:A4 landscape; margin:10mm 12mm;}
+  html,body{background:#fff; padding:0; overflow:visible;}
+  body > *:not(#printArea){display:none !important;}
+  #printArea{display:block !important; color:#000; font-size:9.5pt; line-height:1.35;
+    -webkit-print-color-adjust:exact; print-color-adjust:exact;}
+}
+#printArea .p-head{display:flex; justify-content:space-between; align-items:flex-start; gap:12mm; margin-bottom:4mm;}
+#printArea h1{font-size:15pt; margin:0 0 1mm;}
+#printArea .p-sub{font-size:8.5pt; color:#444;}
+#printArea .p-stamps{display:flex; border:0.6pt solid #000;}
+#printArea .p-stamps div{width:20mm; text-align:center; font-size:8pt; border-left:0.6pt solid #000;}
+#printArea .p-stamps div:first-child{border-left:none;}
+#printArea .p-stamps span{display:block; border-bottom:0.6pt solid #000; padding:0.6mm 0;}
+#printArea .p-stamps i{display:block; height:15mm;}
+#printArea .p-pay{display:flex; gap:8mm; align-items:baseline; border:1pt solid #000; padding:2mm 4mm; margin-bottom:4mm;}
+#printArea .p-pay b{font-size:16pt;}
+#printArea table{width:100%; border-collapse:collapse; margin-bottom:4mm;}
+#printArea thead{display:table-header-group;}
+#printArea tr{break-inside:avoid; page-break-inside:avoid;}
+#printArea th{background:#e6e6e6; font-weight:600; font-size:8.5pt;}
+#printArea th,#printArea td{border:0.5pt solid #555; padding:1.2mm 2mm; vertical-align:top;}
+#printArea td.n{text-align:right; white-space:nowrap; font-variant-numeric:tabular-nums;}
+#printArea td.c{text-align:center; white-space:nowrap;}
+#printArea .minus{color:#b00000;}
+#printArea tr.total td{font-weight:700; border-top:1.2pt solid #000; background:#f3f3f3;}
+#printArea h2{font-size:10.5pt; margin:0 0 1.5mm;}
+#printArea .p-note{font-size:8pt; color:#333;}
 .items-total{display:flex; justify-content:space-between; padding:8px 4px 0; font-size:14px;}
 .items-total b{font-size:18px;}
 .form-foot{font-size:13px; color:var(--warn); margin-top:10px; min-height:18px;}
@@ -222,7 +252,8 @@ label.field{display:block; font-size:12px; color:var(--sub); margin:12px 0 4px;}
     <label class="field" for="sumMonth" style="margin-top:0;">対象の月（伝票日付の月）</label>
     <select id="sumMonth"></select>
     <div id="sumBody"></div>
-    <div class="data-btns" style="margin-top:12px;">
+    <button class="btn" id="printMonthly" style="margin-top:14px;">🖨 A4横で印刷</button>
+    <div class="data-btns" style="margin-top:8px;">
       <button class="btn secondary" id="csvSlips">伝票CSV</button>
       <button class="btn secondary" id="csvItems">明細CSV</button>
     </div>
@@ -310,6 +341,7 @@ label.field{display:block; font-size:12px; color:var(--sub); margin:12px 0 4px;}
 </div>
 
 <div id="toast"></div>
+<div id="printArea"></div>
 
 <script>
 'use strict';
@@ -1458,6 +1490,58 @@ function monthRecords() {
   return { ym, recs: sortedRecords().reverse().filter(r => r.status === 'active' && r.fields.slipDate && ymOf(r.fields.slipDate) === ym) };
 }
 
+// 月次のまとめを A4 横で印刷する。伝票は日付の古い順、同じ日は 納品 → 返品 → 登録順
+function printMonthly() {
+  const ym = document.getElementById('sumMonth').value;
+  const recs = Object.values(records)
+    .filter(r => r.status === 'active' && r.fields.slipDate && ymOf(r.fields.slipDate) === ym)
+    .sort((a, b) => {
+      if (a.fields.slipDate !== b.fields.slipDate) return a.fields.slipDate < b.fields.slipDate ? -1 : 1;
+      const ka = a.fields.kind === '納品' ? 0 : 1, kb = b.fields.kind === '納品' ? 0 : 1;
+      if (ka !== kb) return ka - kb;
+      return a.createdAt < b.createdAt ? -1 : 1;
+    });
+  if (!recs.length) { toast('この月には伝票がありません'); return; }
+  const { rows, sum, unknown, issues } = monthSummary(ym);
+  const voided = Object.values(records).filter(r => r.status === 'void' && r.fields.slipDate && ymOf(r.fields.slipDate) === ym).length;
+  const pay = sum.inTotal - sum.outTotal;
+  const yen = v => (v == null ? '—' : fmt(v));
+  const minus = v => (v ? '−' + fmt(v) : '0');
+  const now = new Date();
+
+  const supRows = rows.map(r => `<tr><td>${escapeHtml(r.name)}</td><td class="n">${r.inN}</td><td class="n">${fmt(r.inTotal)}</td>` +
+    `<td class="n">${r.outN}</td><td class="n${r.outTotal ? ' minus' : ''}">${minus(r.outTotal)}</td><td class="n"><b>${fmt(r.inTotal - r.outTotal)}</b></td></tr>`).join('');
+  const slipRows = recs.map((r, i) => {
+    const f = r.fields;
+    const signed = signedTotal(r);
+    const ng = slipChecks(f, r.items).issues.length;
+    return `<tr><td class="n">${i + 1}</td><td class="c">${escapeHtml(fmtShortDay(f.slipDate))}</td><td class="c">${escapeHtml(f.kind || '—')}</td>` +
+      `<td>${escapeHtml(f.supplier || '—')}</td><td>${escapeHtml(itemsSummary(r.items) || '—')}</td><td class="n">${r.items.length}</td>` +
+      `<td class="n">${yen(f.subtotal)}</td><td class="n">${yen(f.tax)}</td><td class="n">${yen(f.total)}</td>` +
+      `<td class="n${signed < 0 ? ' minus' : ''}">${signed == null ? '—' : (signed < 0 ? '−' : '') + fmt(Math.abs(signed))}</td>` +
+      `<td class="c">${ng ? '要確認' : '✓'}</td><td>${escapeHtml(f.memo || '')}</td></tr>`;
+  }).join('');
+
+  const notes = ['差し引き支払額 ＝ 納品の合計（税込）− 返品の合計（税込）。月は伝票日付の月。'];
+  if (voided) notes.push(`取消した伝票 ${voided}枚は含めていません。`);
+  if (unknown.length) notes.push(`種別か合計が未入力の伝票 ${unknown.length}枚は支払額に入っていません（一覧では支払額が「—」）。`);
+  if (issues) notes.push(`検算が合わない伝票が ${issues}枚あります（「要確認」）。金額は伝票の合計欄の値で集計しています。`);
+
+  document.getElementById('printArea').innerHTML =
+    `<div class="p-head"><div><h1>仕入台帳　月次のまとめ　${ymLabel(ym)}</h1>` +
+    `<div class="p-sub">印刷 ${escapeHtml(fmtDate(now.toISOString()))}${operator ? '　👤 ' + escapeHtml(operator) : ''}　／　伝票 ${recs.length}枚（納品 ${sum.inN}・返品 ${sum.outN}${unknown.length ? '・未集計 ' + unknown.length : ''}）</div></div>` +
+    `<div class="p-stamps"><div><span>担当</span><i></i></div><div><span>確認</span><i></i></div><div><span>店長</span><i></i></div></div></div>` +
+    `<div class="p-pay"><span>差し引き支払額（税込）</span><b>${pay < 0 ? '−' : ''}${fmt(Math.abs(pay))}円</b>` +
+    `<span>＝ 納品 ${fmt(sum.inTotal)}円 − 返品 ${fmt(sum.outTotal)}円</span><span class="p-sub">（税抜 ${fmt(sum.inSub - sum.outSub)}円）</span></div>` +
+    `<h2>取引先ごと</h2><table><thead><tr><th>取引先</th><th>納品枚数</th><th>納品（税込）</th><th>返品枚数</th><th>返品（税込）</th><th>差し引き</th></tr></thead><tbody>${supRows}` +
+    (rows.length > 1 ? `<tr class="total"><td>合計</td><td class="n">${sum.inN}</td><td class="n">${fmt(sum.inTotal)}</td><td class="n">${sum.outN}</td><td class="n minus">${minus(sum.outTotal)}</td><td class="n">${fmt(pay)}</td></tr>` : '') +
+    `</tbody></table>` +
+    `<h2>伝票の一覧</h2><table><thead><tr><th>No</th><th>伝票日付</th><th>種別</th><th>取引先</th><th>明細</th><th>品目</th><th>小計</th><th>消費税</th><th>合計</th><th>支払額</th><th>検算</th><th>備考</th></tr></thead>` +
+    `<tbody>${slipRows}<tr class="total"><td colspan="9">納品 ${fmt(sum.inTotal)} − 返品 ${fmt(sum.outTotal)}</td><td class="n">${fmt(pay)}</td><td colspan="2"></td></tr></tbody></table>` +
+    `<div class="p-note">${notes.map(escapeHtml).join('<br>')}</div>`;
+  window.print();
+}
+
 // 伝票CSV: 1伝票1行。支払額は 納品＋・返品− の符号付き
 function exportSlipsCsv() {
   const { ym, recs } = monthRecords();
@@ -1799,6 +1883,7 @@ document.getElementById('operatorClose').addEventListener('click', closeOperator
 document.getElementById('csvSlips').addEventListener('click', exportSlipsCsv);
 document.getElementById('csvItems').addEventListener('click', exportItemsCsv);
 document.getElementById('sumMonth').addEventListener('change', renderMonthly);
+document.getElementById('printMonthly').addEventListener('click', printMonthly);
 document.getElementById('jsonExport').addEventListener('click', exportJson);
 document.getElementById('jsonImportBtn').addEventListener('click', () => document.getElementById('jsonImportFile').click());
 document.getElementById('jsonImportFile').addEventListener('change', e => { if (e.target.files[0]) importJson(e.target.files[0]); e.target.value = ''; });
