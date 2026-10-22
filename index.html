@@ -815,10 +815,17 @@ function parseOcrText(text) {
   let originMarks = 0;
   let headerTotal = null, afterHeaderLabel = false; // 伝票上部の「合計金額」の値（明細ではない）
   let lastHeaderAt = -1;                  // 表の見出し（産地・摘要・数量・単価・金額…）が最後に出た位置
-  ocrTokens(text).forEach((t, ti) => {
+  const tokens = ocrTokens(text);
+  // 種別: 見出し（納品書／返品伝票）が読めないこともあるので、全体に「返品」があれば返品、
+  // 無ければ「納品」（納品日・件名の「野菜等納品」など）があれば納品とする
+  if (tokens.some(t => /返品/.test(t))) out.kind = '返品';
+  else if (tokens.some(t => /納品/.test(t))) out.kind = '納品';
+  tokens.forEach((raw, ti) => {
+    // 品名の頭に付くゴミ（「「生椎茸」「1紅玉りんご」など。2026-10-22 実機）を取る
+    let t = raw.replace(/^[「『｜|!~'"]+/, '').replace(/[」』]+$/, '');
+    if (/^[1lI](?=[぀-ヿ㐀-鿿]{2})/.test(t) && !/\d/.test(t.slice(1))) t = t.slice(1);
+    if (!t) return;
     if (OCR_TABLE_HEADS.has(t)) lastHeaderAt = ti;
-    if (!out.kind && /納品書/.test(t)) out.kind = '納品';
-    if (!out.kind && /返品/.test(t)) out.kind = '返品';
     const d = t.match(/(\d{4}\s*年\s*)?\d{1,2}\s*月\s*\d{1,2}\s*日/);
     if (d) { if (!out.slipDate) out.slipDate = d[0].replace(/\s/g, ''); return; }
     if (/有限会社|株式会社|合同会社|\((有|株)\)|㈲|㈱/.test(t) && !/セブン/.test(t)) { if (!out.supplier) out.supplier = t; return; }
@@ -839,6 +846,8 @@ function parseOcrText(text) {
       if (/[1-9]/.test(t) || t.length > 2) yens.push(null);
       return;
     }
+    // 同じ数文字ばかりが続く長い語（¥0 の列を「映映味味妹妹…」と読み違えたもの）は捨てる
+    if (t.length >= 6 && new Set(t).size <= 4) return;
     if (KANA_KANJI.test(t)) { names.push(t); nameAt.push(ti); }
   });
 
@@ -864,6 +873,9 @@ function parseOcrText(text) {
   const nameSets = [names];
   const afterHead = names.filter((_, i) => nameAt[i] > lastHeaderAt);
   if (afterHead.length && afterHead.length < names.length) nameSets.push(afterHead);
+  // 品名が 単価・金額の組 より多いときは、末尾の余り（読み違えたゴミ）を落とした案も作る
+  const pairs = Math.ceil(yens.length / 2);
+  nameSets.slice().forEach(nm => { if (pairs && nm.length > pairs) nameSets.push(nm.slice(0, pairs)); });
   nameSets.forEach(nm => {
     const n2 = nm.length;
     const aligned = qtys.length === n2;
