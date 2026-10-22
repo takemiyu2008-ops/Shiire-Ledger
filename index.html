@@ -770,6 +770,7 @@ function slipChecks(fields, items) {
   }
   if (subtotal != null && tax != null && total != null && subtotal + tax !== total) issues.push(`小計＋税＝${fmt(subtotal + tax)} ですが、合計は ${fmt(total)}`);
   if (!fields.kind) issues.push('種別（納品／返品）が未入力です');
+  if (subtotal == null && (items || []).length) issues.push('小計が未入力のため、明細の合計と照合できません');
   if (slipTotal(fields) == null) issues.push('合計が未入力です（月次の支払額に入りません）');
   return { issues, rowIssues };
 }
@@ -789,12 +790,15 @@ const KANA_KANJI = /[぀-ヿ㐀-鿿]/;
 const OCR_CONF_OK = 0.95;
 const OCR_CONF_LOW = 0.5;
 const OCR_QTY_MAX = 999;
+const OCR_TABLE_HEADS = new Set(['産地', '摘要', '品名', '残数', '数量', '単価', '金額']);
 
 function ocrTokens(text) {
   const tokens = [];
   String(text || '').split(/\r?\n/).forEach(line => {
     // ¥ の読み違い（「味」「·」「・」「•」）は、直後に数字が続くときだけ ¥ に戻す
-    const s = toHalf(line).replace(/[￥\\]/g, '¥').replace(/[味·・•‧∙](?=\s*\d)/g, '¥')
+    // 旧字体での読み違い（「產地」など。2026-10-22 実機）は新字体に直す
+    const s = toHalf(line).replace(/[產殘數單價]/g, c => ({ 產: '産', 殘: '残', 數: '数', 單: '単', 價: '価' }[c]))
+      .replace(/[￥\\]/g, '¥').replace(/[味·・•‧∙](?=\s*\d)/g, '¥')
       .replace(/¥\s+/g, '¥').replace(/\s+/g, ' ').trim();
     if (!s) return;
     // 1行に 品名・数量・金額 が並ぶ形は空白で切る。日付・住所・電話の行は切らない
@@ -807,9 +811,12 @@ function ocrTokens(text) {
 function parseOcrText(text) {
   const out = { kind: null, slipDate: null, supplier: null, items: [], subtotal: null, tax: null, total: null, confidence: {}, notes: null };
   const names = [], qtys = [], yens = []; // yens の null は「数字を含むが読めなかった金額」
+  const nameAt = [];                      // 各品名が何番目の語だったか
   let originMarks = 0;
   let headerTotal = null, afterHeaderLabel = false; // 伝票上部の「合計金額」の値（明細ではない）
-  ocrTokens(text).forEach(t => {
+  let lastHeaderAt = -1;                  // 表の見出し（産地・摘要・数量・単価・金額…）が最後に出た位置
+  ocrTokens(text).forEach((t, ti) => {
+    if (OCR_TABLE_HEADS.has(t)) lastHeaderAt = ti;
     if (!out.kind && /納品書/.test(t)) out.kind = '納品';
     if (!out.kind && /返品/.test(t)) out.kind = '返品';
     const d = t.match(/(\d{4}\s*年\s*)?\d{1,2}\s*月\s*\d{1,2}\s*日/);
@@ -832,7 +839,7 @@ function parseOcrText(text) {
       if (/[1-9]/.test(t) || t.length > 2) yens.push(null);
       return;
     }
-    if (KANA_KANJI.test(t)) names.push(t);
+    if (KANA_KANJI.test(t)) { names.push(t); nameAt.push(ti); }
   });
 
   // 伝票下の 小計・消費税・合計（小計＋税＝合計 になる3つ組を後ろから探す）
@@ -848,26 +855,39 @@ function parseOcrText(text) {
   // 「合計金額」の見出しが読めず値だけが残った場合は、明細から除く
   if (headerTotal == null && out.total != null) { const k = yens.indexOf(out.total); if (k >= 0) yens.splice(k, 1); }
 
-  const n = names.length;
-  const qtyAligned = qtys.length === n; // 数量が全行そろっているときだけ、何番目かで行に当てる
   const divQty = (p, a) => (p && a != null && a % p === 0 && a / p >= 1 && a / p <= OCR_QTY_MAX ? a / p : null);
 
-  // 単価と金額の並び方の候補: 列ごと（金額の列を末尾に合わせる／単価の列を先頭に合わせる）・1行ずつ交互。
-  // 金額 ÷ 単価 が割り切れる行（数量がそろっていれば、それとも一致する行）が最も多いものを選ぶ
-  const cands = [];
-  if (yens.length >= n) {
-    cands.push({ P: yens.slice(0, yens.length - n), A: yens.slice(yens.length - n) });
-    cands.push({ P: yens.slice(0, n), A: yens.slice(n) });
-  }
-  cands.push({ P: yens.filter((_, i) => i % 2 === 0), A: yens.filter((_, i) => i % 2 === 1) });
-  const score = c => names.reduce((sc, _, i) => {
-    const q = divQty(c.P[i], c.A[i]);
-    return sc + (q == null ? 0 : 1 + (qtyAligned && qtys[i] === q ? 1 : 0));
-  }, 0);
-  const best = cands.reduce((a, b) => (score(b) > score(a) ? b : a));
+  // 品名・単価・金額の組み立て方の候補を作り、金額 ÷ 単価 が割り切れる行（数量がそろっていれば、
+  // それとも一致する行）が最も多いものを選ぶ。品名の候補は「全部」と「表の見出しより後に出たものだけ」
+  // （1行ずつ並ぶ iPhone の出力で、読み違えた見出しが品名に紛れたときに行がずれないように）
+  const layouts = [];
+  const nameSets = [names];
+  const afterHead = names.filter((_, i) => nameAt[i] > lastHeaderAt);
+  if (afterHead.length && afterHead.length < names.length) nameSets.push(afterHead);
+  nameSets.forEach(nm => {
+    const n2 = nm.length;
+    const aligned = qtys.length === n2;
+    const cands = [];
+    if (yens.length >= n2) {
+      cands.push({ P: yens.slice(0, yens.length - n2), A: yens.slice(yens.length - n2) }); // 列ごと（金額の列を末尾に）
+      cands.push({ P: yens.slice(0, n2), A: yens.slice(n2) });                             // 列ごと（単価の列を先頭に）
+    }
+    cands.push({ P: yens.filter((_, i) => i % 2 === 0), A: yens.filter((_, i) => i % 2 === 1) }); // 1行ずつ交互
+    cands.forEach(c => {
+      const score = nm.reduce((sc, _, i) => {
+        const q = divQty(c.P[i], c.A[i]);
+        return sc + (q == null ? 0 : 1 + (aligned && qtys[i] === q ? 1 : 0));
+      }, 0);
+      layouts.push({ names: nm, P: c.P, A: c.A, qtyAligned: aligned, score, gap: Math.abs(yens.length - 2 * n2) });
+    });
+  });
+  // 点が同じなら、品名の数と金額の数（2個で1行）が釣り合うほうを選ぶ
+  const best = layouts.reduce((a, b) => (b.score > a.score || (b.score === a.score && b.gap < a.gap) ? b : a));
+  const n = best.names.length;
+  const qtyAligned = best.qtyAligned;
 
   let filled = 0, qtyFromAmount = 0;
-  out.items = names.map((name, i) => {
+  out.items = best.names.map((name, i) => {
     let qty = qtyAligned ? qtys[i] : null;
     let unitPrice = best.P[i] != null ? best.P[i] : null;
     let amount = best.A[i] != null ? best.A[i] : null;

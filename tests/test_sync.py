@@ -535,6 +535,9 @@ def test_ocr_flow(browser, base_url):
     check('iPhone の出方: 「·」を ¥ に・数量は 金額÷単価・小計と税は合計金額と一致を確かめて入れる',
           [(i['name'], i['qty'], i['unitPrice'], i['amount']) for i in r3['items']] == [('玉葱', 4, 150, 600), ('胡瓜', 10, 180, 1800), ('枝豆', 2, 250, 500)]
           and (r3['subtotal'], r3['tax'], r3['total']) == (2900, 232, 3132), str(r3))
+    for old, new, why in [('産地', '產地', '見出しが旧字体（產地）'), ('摘要', '摘票', '見出しの読み違い（摘票）')]:
+        r5 = page.evaluate('t => parseOcrText(t)', OCR_IPHONE.replace(old, new))
+        check(f'{why}でも品名がずれない', [i['name'] for i in r5['items']] == ['玉葱', '胡瓜', '枝豆'] and r5['items'][0]['qty'] == 4, str(r5['items'][:2]))
     r4 = page.evaluate('t => parseOcrText(t)', OCR_IPHONE.replace('·3,132', '·3,200'))
     check('合計金額と合わなければ小計・税は空欄のまま', r4['subtotal'] is None and r4['tax'] is None and r4['total'] == 3200, str(r4))
     check('1行ずつの形も解析できる', [(i['name'], i['qty'], i['unitPrice'], i['amount']) for i in r['items']] == [('玉葱', 4, 150, 600), ('胡瓜', 10, 180, 1800)]
@@ -556,7 +559,8 @@ def test_ocr_flow(browser, base_url):
 def test_parser_real_samples(browser, base_url):
     samples = ROOT / 'samples'
     pairs = [('ocr_nouhin_2026-10-01.txt', 'nouhin_2026-10-01.jpg'), ('ocr_henpin_2026-10-01.txt', 'henpin_2026-10-01.jpg'),
-             ('ocr_iphone_nouhin_2026-10-01.txt', 'nouhin_2026-10-01.jpg')]  # 最後は iPhone のショートカットの実際の出力
+             ('ocr_iphone_nouhin_2026-10-01.txt', 'nouhin_2026-10-01.jpg'),   # 以下は iPhone のショートカットの実際の出力
+             ('ocr_iphone2_nouhin_2026-10-01.txt', 'nouhin_2026-10-01.jpg')]  # 見出しの「産地」が「產地」になった回
     if not (samples / 'truth.json').exists() or not all((samples / a).exists() for a, _ in pairs):
         print('▼ 本物の伝票での解析: samples/ が無いので省略')
         return
