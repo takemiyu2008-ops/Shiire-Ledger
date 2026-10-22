@@ -210,6 +210,51 @@ TEL: 03-0000-0000
 ¥134
 ¥1,814"""
 
+# iPhone のショートカットの実際の出方（2026-10-22 実機）をまねたもの:
+# 1行ずつ並ぶ・¥ が「·」になる・1桁の数量は読めない（10 だけ読める）・伝票下の小計／税／合計は読めない・¥0 の列は「味味味」
+OCR_IPHONE = """納品書
+セブンイレブン
+テスト店様
+納品日
+2026年10月3日
+有限会社 テスト青果
+TEL:
+03-0000-0000
+
+合計金額
+·3,132
+（税込）
+
+産地
+摘要
+残数
+数量
+単価
+金額
+
+玉葱
+
+
+¥150
+·600
+
+胡瓜
+
+10
+·180
+¥1,800
+m
+枝豆
+
+
+·250
+·500
+
+
+
+
+味味味味味味"""
+
 # 1行ずつ並ぶ形（テキスト認識表示からの貼り付けなど）
 OCR_ROWS = """納品書
 有限会社 テスト青果
@@ -486,6 +531,12 @@ def test_ocr_flow(browser, base_url):
     r2 = page.evaluate('t => parseOcrText(t)', '納品書\n玉葱\n人参\n4\n3\n味150\n味150\n味600\n味450\n味味味味\n味\n小計\n¥1,050\n¥84\n¥1,134')
     check('「味」と読み違えた ¥ を直し、「味味味」は空行として捨てる',
           [(i['name'], i['qty'], i['unitPrice'], i['amount']) for i in r2['items']] == [('玉葱', 4, 150, 600), ('人参', 3, 150, 450)] and r2['total'] == 1134, str(r2))
+    r3 = page.evaluate('t => parseOcrText(t)', OCR_IPHONE)
+    check('iPhone の出方: 「·」を ¥ に・数量は 金額÷単価・小計と税は合計金額と一致を確かめて入れる',
+          [(i['name'], i['qty'], i['unitPrice'], i['amount']) for i in r3['items']] == [('玉葱', 4, 150, 600), ('胡瓜', 10, 180, 1800), ('枝豆', 2, 250, 500)]
+          and (r3['subtotal'], r3['tax'], r3['total']) == (2900, 232, 3132), str(r3))
+    r4 = page.evaluate('t => parseOcrText(t)', OCR_IPHONE.replace('·3,132', '·3,200'))
+    check('合計金額と合わなければ小計・税は空欄のまま', r4['subtotal'] is None and r4['tax'] is None and r4['total'] == 3200, str(r4))
     check('1行ずつの形も解析できる', [(i['name'], i['qty'], i['unitPrice'], i['amount']) for i in r['items']] == [('玉葱', 4, 150, 600), ('胡瓜', 10, 180, 1800)]
           and (r['subtotal'], r['tax'], r['total']) == (2400, 192, 2592) and r['slipDate'] == '2026年10月2日', str(r))
     check('ページエラーなし（文字認識）', not errors, str(errors[:2]))
@@ -504,7 +555,8 @@ def test_ocr_flow(browser, base_url):
 
 def test_parser_real_samples(browser, base_url):
     samples = ROOT / 'samples'
-    pairs = [('ocr_nouhin_2026-10-01.txt', 'nouhin_2026-10-01.jpg'), ('ocr_henpin_2026-10-01.txt', 'henpin_2026-10-01.jpg')]
+    pairs = [('ocr_nouhin_2026-10-01.txt', 'nouhin_2026-10-01.jpg'), ('ocr_henpin_2026-10-01.txt', 'henpin_2026-10-01.jpg'),
+             ('ocr_iphone_nouhin_2026-10-01.txt', 'nouhin_2026-10-01.jpg')]  # 最後は iPhone のショートカットの実際の出力
     if not (samples / 'truth.json').exists() or not all((samples / a).exists() for a, _ in pairs):
         print('▼ 本物の伝票での解析: samples/ が無いので省略')
         return
@@ -517,14 +569,14 @@ def test_parser_real_samples(browser, base_url):
         rows = [(i['name'], i['qty'], i['unitPrice'], i['amount']) for i in r['items']]
         want = [(i['name'], i['qty'], i['unitPrice'], i['amount']) for i in t['items']]
         exact = sum(1 for a, b in zip(rows, want) if a == b)
-        print(f'    {jpg}: 行 {exact}/{len(want)} が完全一致・{r["notes"]}')
-        check(f'{jpg}: 小計・税・合計', (r['subtotal'], r['tax'], r['total']) == (t['subtotal'], t['tax'], t['total']))
-        check(f'{jpg}: 品名の数', len(rows) == len(want))
+        print(f'    {ocr}: 行 {exact}/{len(want)} が完全一致・{r["notes"]}')
+        check(f'{ocr}: 小計・税・合計', (r['subtotal'], r['tax'], r['total']) == (t['subtotal'], t['tax'], t['total']))
+        check(f'{ocr}: 品名の数', len(rows) == len(want))
         if jpg.startswith('nouhin'):
-            check(f'{jpg}: 全行が正解と一致', exact == len(want))
+            check(f'{ocr}: 全行が正解と一致', exact == len(want))
         # 誤った値を入れていないこと（読めない値は空欄のまま）
         wrong = [(a, b) for a, b in zip(rows, want) if any(x is not None and x != y for x, y in zip(a[1:], b[1:]))]
-        check(f'{jpg}: 数字を誤って入れた行が無い', not wrong, str(wrong[:3]))
+        check(f'{ocr}: 数字を誤って入れた行が無い', not wrong, str(wrong[:3]))
     ctx.close()
 
 
