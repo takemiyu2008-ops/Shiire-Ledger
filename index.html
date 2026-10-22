@@ -1,0 +1,1818 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>仕入台帳</title>
+<style>
+:root{
+  --bg:#f2f4f7; --card:#ffffff; --ink:#1c2434; --sub:#68717f;
+  --accent:#0f6fde; --in:#0c8a4c; --out:#c2413b; --line:#e2e6ec; --warn:#b7791f;
+}
+*{box-sizing:border-box; margin:0; padding:0;}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
+  background:var(--bg); color:var(--ink); padding-bottom:56px;
+  font-feature-settings:"tnum";
+}
+html,body{overflow-x:hidden;}
+.topbar{position:sticky; top:0; z-index:20;}
+header{
+  background:var(--ink); color:#fff;
+  padding:8px 16px; display:flex; justify-content:space-between; align-items:center; gap:8px;
+}
+header h1{font-size:16px; font-weight:600;}
+header .clock{font-size:11px; opacity:.85; margin-top:2px; font-variant-numeric:tabular-nums;}
+header .total{font-size:18px; font-weight:700; white-space:nowrap; text-align:right;}
+header .total small{font-size:11px; font-weight:400; opacity:.75; margin-right:6px;}
+nav.tabs{display:flex; background:var(--card); border-bottom:1px solid var(--line);}
+nav.tabs button{
+  flex:1; padding:12px 4px; font-size:14px; border:none; background:none; color:var(--sub);
+  border-bottom:3px solid transparent; cursor:pointer;
+}
+nav.tabs button.active{color:var(--accent); border-bottom-color:var(--accent); font-weight:600;}
+main{max-width:640px; margin:0 auto; padding:16px 12px;}
+section.tab{display:none;}
+section.tab.active{display:block;}
+.card{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:16px;}
+.card h2{font-size:14px; color:var(--sub); font-weight:600; margin-bottom:12px;}
+.notice{background:#fff7e6; border:1px solid #f0dcae; border-radius:10px; padding:12px; font-size:13px; margin-bottom:16px; line-height:1.6;}
+.hint{font-size:12px; color:var(--sub); margin-top:4px; line-height:1.6;}
+select,textarea,input[type="text"],input[type="tel"],input[type="date"],input[type="number"],input[type="search"],input[type="password"]{
+  width:100%; border:1px solid var(--line); border-radius:9px; padding:10px; font-size:16px;
+  background:#fff; color:var(--ink); font-family:inherit; -webkit-appearance:none; appearance:none;
+}
+textarea{min-height:64px; resize:vertical;}
+label.field{display:block; font-size:12px; color:var(--sub); margin:12px 0 4px;}
+.btn{
+  display:block; width:100%; padding:14px; border:none; border-radius:10px;
+  background:var(--accent); color:#fff; font-size:16px; font-weight:600; cursor:pointer; margin-top:14px;
+}
+.btn:active{opacity:.85;}
+.btn:disabled{opacity:.5; cursor:default;}
+[hidden]{display:none !important;}
+.btn.secondary{background:#eef1f5; color:var(--ink); font-weight:500; font-size:14px; padding:11px;}
+.btn.danger{background:#fdeeee; color:var(--out);}
+.btn.ok{background:var(--in);}
+.data-btns{display:flex; gap:8px; flex-wrap:wrap;}
+.data-btns .btn{flex:1; min-width:140px; margin-top:0;}
+.sync-chip{
+  display:inline-block; font-size:10px; padding:2px 8px; border-radius:999px; border:none;
+  margin-top:3px; cursor:pointer; color:#fff; background:rgba(255,255,255,.16); opacity:.9;
+}
+.sync-chip.ok{background:#0c8a4c;}
+.sync-chip.syncing{background:#0f6fde;}
+.sync-chip.offline{background:#8a6d1f;}
+.sync-chip.error{background:#c2413b;}
+.op-btns{display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:12px; margin-bottom:4px;}
+.op-btns .btn{margin-top:0;}
+.op-btns .btn.selected{background:var(--accent); color:#fff; font-weight:600;}
+.modal-overlay{
+  position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,.45); z-index:40;
+  display:none; align-items:flex-start; justify-content:center; padding:20px 12px; overflow-y:auto;
+}
+.modal-overlay.show{display:flex;}
+.modal{background:var(--card); border-radius:14px; padding:20px; width:100%; max-width:420px; margin:auto 0;}
+.modal h2{font-size:15px; margin-bottom:8px;}
+.modal p.desc{font-size:13px; color:var(--sub); line-height:1.7; margin-bottom:4px;}
+.modal .msg{font-size:13px; color:var(--out); min-height:18px; margin-top:8px;}
+#toast{
+  position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
+  background:var(--ink); color:#fff; padding:10px 20px; border-radius:999px; font-size:14px;
+  opacity:0; pointer-events:none; transition:opacity .25s; z-index:50; white-space:nowrap; max-width:92vw; overflow:hidden; text-overflow:ellipsis;
+}
+#toast.show{opacity:.95;}
+.badge{display:inline-block; font-size:10px; padding:1px 6px; border-radius:999px; margin-left:6px; vertical-align:middle; white-space:nowrap;}
+.badge.nouhin{background:#e2f5ea; color:var(--in);}
+.badge.henpin{background:#fbeaea; color:var(--out);}
+.badge.void{background:#eef1f5; color:var(--sub);}
+.badge.warn{background:#fff3d6; color:var(--warn);}
+.badge.over{background:#fbeaea; color:var(--out);}
+/* 一覧 */
+.chips{display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px;}
+.chips button{
+  border:1px solid var(--line); background:#fff; border-radius:999px; padding:6px 12px; font-size:13px; color:var(--sub); cursor:pointer;
+}
+.chips button.active{background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600;}
+.rec-item{border-bottom:1px solid var(--line); padding:10px 2px; display:flex; gap:10px; align-items:flex-start; cursor:pointer;}
+.rec-item:last-child{border-bottom:none;}
+.rec-item .when{width:86px; flex-shrink:0; font-size:13px; line-height:1.5;}
+.rec-item .when .d{font-weight:700; font-size:15px;}
+.rec-item .who{flex:1; min-width:0;}
+.rec-item .who .name{font-size:15px; font-weight:600;}
+.rec-item .who .items{font-size:12px; color:var(--sub); margin-top:2px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+.rec-item .side{text-align:right; flex-shrink:0; font-size:12px;}
+.rec-item .side a{color:var(--accent); text-decoration:none; display:block; margin-top:4px;}
+.rec-item.void .who, .rec-item.void .side .amt{opacity:.5; text-decoration:line-through;}
+.rec-item .side .amt{font-size:15px; font-weight:700; display:block;}
+.rec-item .side .amt.minus{color:var(--out);}
+.rec-date{
+  font-size:12px; font-weight:600; color:var(--sub); background:#eef1f5;
+  padding:4px 10px; border-radius:999px; display:inline-block; margin:12px 0 4px;
+}
+/* フォーム */
+.fw{margin-top:12px;}
+.fw label{display:block; font-size:12px; color:var(--sub); margin-bottom:4px;}
+.fw.flag input, .fw.flag select, .fw.flag textarea{background:#fff8e1; border-color:#e8c76a;}
+.fw.unread input, .fw.unread select, .fw.unread textarea{border-color:var(--out); background:#fff5f5;}
+.fw .raw{font-size:11px; color:var(--sub); margin-top:3px;}
+.items-table{width:100%; border-collapse:collapse; margin-top:6px;}
+.items-table th{font-size:11px; color:var(--sub); font-weight:500; text-align:left; padding:2px 4px;}
+.items-table td{padding:3px 2px; vertical-align:top;}
+.items-table input{padding:8px 6px; font-size:15px;}
+/* 明細行（入力）: 1段目=品名、2段目=産地・数量・単価・金額 */
+.item-row{border:1px solid var(--line); border-radius:10px; padding:8px; margin-top:8px;}
+.item-row .ir-top{display:flex; gap:6px;}
+.item-row .ir-top input{flex:1; padding:8px; font-size:15px;}
+.item-row .ir-nums{display:grid; grid-template-columns:0.8fr 0.9fr 1.2fr 1.3fr; gap:6px; margin-top:6px;}
+.item-row .ir-nums label{display:block; font-size:10px; color:var(--sub); margin-bottom:2px;}
+.item-row .ir-nums input{padding:7px 6px; font-size:15px;}
+.item-row button.rm{border:none; background:#f7f8fa; border-radius:7px; width:34px; color:var(--out); font-size:18px; cursor:pointer; flex-shrink:0;}
+.item-row.flag input{background:#fff8e1; border-color:#e8c76a;}
+.item-row .ir-check{font-size:11px; color:var(--warn); margin-top:4px;}
+.item-row .ir-check:empty{display:none;}
+.items-table td.num{text-align:right; white-space:nowrap;}
+/* 検算 */
+.checkbox{border-radius:10px; padding:10px 12px; font-size:13px; line-height:1.7; margin-top:12px;}
+.checkbox.ok{background:#e9f7ef; color:var(--in);}
+.checkbox.ng{background:#fff3d6; color:#7a5310;}
+/* 月次 */
+.sum-table{width:100%; border-collapse:collapse; font-size:14px;}
+.sum-table th{font-size:11px; color:var(--sub); font-weight:500; text-align:right; padding:4px; border-bottom:1px solid var(--line);}
+.sum-table th:first-child,.sum-table td:first-child{text-align:left;}
+.sum-table td{padding:8px 4px; text-align:right; border-bottom:1px solid var(--line); white-space:nowrap;}
+.sum-table td:first-child{white-space:normal;}
+.sum-table tr.total td{font-weight:700; border-bottom:none; border-top:2px solid var(--ink);}
+.sum-table .minus{color:var(--out);}
+.pay-big{font-size:26px; font-weight:700; margin:4px 0 2px;}
+.items-total{display:flex; justify-content:space-between; padding:8px 4px 0; font-size:14px;}
+.items-total b{font-size:18px;}
+.form-foot{font-size:13px; color:var(--warn); margin-top:10px; min-height:18px;}
+/* 撮影 */
+.spinner{display:inline-block; width:18px; height:18px; border:3px solid #cfd8e6; border-top-color:var(--accent); border-radius:50%; animation:spin 1s linear infinite; vertical-align:middle; margin-right:8px;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.status-line{font-size:14px; margin-top:12px; min-height:22px; line-height:1.6;}
+.status-line.err{color:var(--out);}
+/* 詳細 */
+.kv{display:flex; gap:10px; padding:7px 0; border-bottom:1px solid var(--line); font-size:14px;}
+.kv:last-child{border-bottom:none;}
+.kv .k{width:96px; flex-shrink:0; color:var(--sub); font-size:12px; padding-top:2px;}
+.kv .v{flex:1; word-break:break-all; white-space:pre-wrap;}
+.kv .v a{color:var(--accent);}
+.hist-item{border-bottom:1px solid var(--line); padding:8px 2px; font-size:12px; line-height:1.6;}
+.hist-item:last-child{border-bottom:none;}
+.hist-item .m{color:var(--sub);}
+.meta{font-size:12px; color:var(--sub); margin-top:8px; line-height:1.7;}
+</style>
+</head>
+<body>
+
+<div class="topbar">
+<header>
+  <div>
+    <h1>仕入台帳</h1>
+    <div class="clock" id="clock"></div>
+    <button type="button" class="sync-chip unset" id="syncChip">同期未設定</button>
+    <button type="button" class="sync-chip" id="operatorChip">👤 未設定</button>
+  </div>
+  <div class="total"><small>今月の支払</small><span id="headerPay">0</span>円<br><small>今月の伝票</small><span id="headerCount">0</span>枚</div>
+</header>
+<nav class="tabs">
+  <button data-tab="list" class="active">一覧</button>
+  <button data-tab="capture">入力</button>
+  <button data-tab="monthly">月次</button>
+  <button data-tab="settings">設定</button>
+</nav>
+</div>
+
+<main>
+
+<!-- ========== 一覧 ========== -->
+<section class="tab active" id="tab-list">
+  <div class="card">
+    <div class="chips" id="filterChips"></div>
+    <input type="search" id="searchBox" placeholder="取引先・品名で検索" autocomplete="off">
+    <div id="recordList"></div>
+  </div>
+</section>
+
+<!-- ========== 撮影 ========== -->
+<section class="tab" id="tab-capture">
+  <div class="card" id="captureCard">
+    <h2>納品書・返品伝票を読み取る</h2>
+    <p class="hint">iPhone のショートカット「仕入伝票」で撮ると、iPhone の中で文字にしてここへ届きます（写真は iPhone の外に出ません）。計算がすべて合えばそのまま登録し、合わない行があれば黄色で示します。</p>
+    <label class="field" for="ocrText">読み取った文字</label>
+    <textarea id="ocrText" rows="5" placeholder="iPhone の写真の「テキスト認識表示」で全部を選んでコピーし、ここに貼り付けてもよい"></textarea>
+    <button class="btn" id="btnParse">この文字から入力欄を作る</button>
+    <button class="btn secondary" id="btnManual">読み取らずに手入力</button>
+    <div class="status-line" id="readStatus"></div>
+  </div>
+  <div class="card" id="formCard" hidden>
+    <h2 id="formTitle">読み取り結果の確認</h2>
+    <div id="formBody"></div>
+    <div class="form-foot" id="formFoot"></div>
+    <button class="btn ok" id="btnSave">保存する</button>
+    <button class="btn secondary" id="btnCancelForm">やめる</button>
+  </div>
+</section>
+
+<!-- ========== 月次 ========== -->
+<section class="tab" id="tab-monthly">
+  <div class="card">
+    <label class="field" for="sumMonth" style="margin-top:0;">対象の月（伝票日付の月）</label>
+    <select id="sumMonth"></select>
+    <div id="sumBody"></div>
+    <div class="data-btns" style="margin-top:12px;">
+      <button class="btn secondary" id="csvSlips">伝票CSV</button>
+      <button class="btn secondary" id="csvItems">明細CSV</button>
+    </div>
+    <p class="hint" style="margin-top:10px;">差し引き支払額 ＝ 納品の合計（税込）− 返品の合計（税込）。取消した伝票は含めません。<br>集計はこの端末に読み込まれている伝票が対象です（直近の月はクラウドから自動で読み込まれます）。</p>
+  </div>
+</section>
+
+<!-- ========== 設定 ========== -->
+<section class="tab" id="tab-settings">
+  <div class="card">
+    <h2>クラウド同期</h2>
+    <p class="hint" id="storageNote"></p>
+    <button class="btn secondary" id="syncSettings">クラウド同期設定</button>
+  </div>
+  <div class="card">
+    <h2>操作者</h2>
+    <p class="hint">この端末で入力する人の名前。登録・修正・取消のすべてに記録されます。</p>
+    <button class="btn secondary" id="operatorSettings">名前を選ぶ</button>
+  </div>
+  <div class="card">
+    <h2>iPhone のショートカット</h2>
+    <p class="hint">ショートカットの最後の「URL を開く」には、次の URL の後ろに読み取った文字（URL エンコード済み）を付けます。作り方は SETUP.md。</p>
+    <input type="text" id="shortcutUrl" readonly>
+    <button class="btn secondary" id="copyShortcutUrl">この URL をコピー</button>
+  </div>
+  <div class="card">
+    <h2>データ管理</h2>
+    <label class="field" for="monthSelect">対象の月（登録した月）</label>
+    <select id="monthSelect"></select>
+    <div class="data-btns" style="margin-top:12px;">
+      <button class="btn secondary" id="jsonExport">バックアップ保存</button>
+      <button class="btn secondary" id="jsonImportBtn">バックアップ復元</button>
+      <button class="btn secondary" id="loadMonthBtn">古い月を読み込む</button>
+    </div>
+    <input type="file" id="jsonImportFile" accept=".json,application/json" hidden>
+    <div id="oldMonthBox" hidden>
+      <label class="field" for="oldMonthSelect">クラウドにある古い月</label>
+      <select id="oldMonthSelect"></select>
+      <button class="btn secondary" id="oldMonthLoad">この月を読み込む（この端末を閉じるまで表示）</button>
+    </div>
+    <p class="hint" style="margin-top:10px;">
+      端末には直近の月だけを保持します。古い月はクラウドにあり、「古い月を読み込む」で一時的に表示できます。
+      伝票の削除はできません（取消として履歴に残ります）。CSV は「月次」タブから書き出せます。
+    </p>
+  </div>
+</section>
+
+</main>
+
+<!-- 同期設定 -->
+<div class="modal-overlay" id="syncOverlay">
+  <div class="modal">
+    <h2>クラウド同期設定</h2>
+    <div id="syncNoServerBox" hidden>
+      <p class="desc">クラウド同期の準備（Firebase の設定）がまだ済んでいません。管理者の方は同梱の SETUP.md の手順に沿って設定してください。設定が済むまで、データはこの端末にのみ保存されます。</p>
+    </div>
+    <div id="syncSetupForm" hidden>
+      <p class="desc">店の共有パスコードを入力すると、同じパスコードを設定した全端末で同じ台帳が共有され、写真の読み取りも使えるようになります。</p>
+      <label class="field" for="syncPasscode">共有パスコード（10文字以上）</label>
+      <input type="password" id="syncPasscode" autocomplete="off">
+      <div class="msg" id="syncMsg"></div>
+      <button class="btn" id="syncConnect">接続する</button>
+    </div>
+    <div id="syncConnectedBox" hidden>
+      <p class="desc">クラウド同期は<strong>有効</strong>です。台帳は同じパスコードの全端末で共有されています。</p>
+      <button class="btn secondary danger" id="syncDisconnect">この端末の同期を解除</button>
+    </div>
+    <button class="btn secondary" id="syncClose">閉じる</button>
+  </div>
+</div>
+
+<!-- 操作者 -->
+<div class="modal-overlay" id="operatorOverlay">
+  <div class="modal">
+    <h2>操作者の設定</h2>
+    <p class="desc">この端末で入力する人の名前を選んでください。以後の記録（登録・修正・取消）すべてにこの名前が付きます。ヘッダーの「👤 名前」からいつでも変更できます。</p>
+    <div class="op-btns" id="operatorBtns"></div>
+    <button class="btn secondary" id="operatorClose">閉じる</button>
+  </div>
+</div>
+
+<!-- 詳細 -->
+<div class="modal-overlay" id="detailOverlay">
+  <div class="modal" id="detailModal"></div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+'use strict';
+
+// ===== 定数 =====
+const APP_VERSION = 1;
+const STORAGE_KEY = 'shiire-v1';           // 台帳本体（月ごとのイベント列）
+const OPERATOR_KEY = 'shiire-operator-v1'; // 端末固有：操作者名
+const SYNC_KEY = 'shiire-sync-v1';         // 端末固有：storeId
+// 注意: GitHub Pages では現金管理アプリ・予約台帳と同じオリジン（takemiyu2008-ops.github.io）になり
+// localStorage を共有するため、キーはすべて shiire- 接頭辞にする。
+
+// 操作者（この端末で入力する人）。イベントの by として記録する。メンバーが変わったらここを書き換える
+const OPERATORS = ['篠原', '橋本', '小宮山', '中瀬'];
+
+// FIELDS-BEGIN
+// ↑ tools/read-test.mjs がこの区間を読む。JS の const 宣言とコメントだけを書くこと
+// 伝票1枚の項目定義。フォーム・読み取りスキーマ・一覧・CSV はすべてこの配列から生成する。
+//   type: text | tel | date | textarea | yen | int | bool | items
+//   options: 選択肢（フォームは選択式。読み取り結果は選択肢の語を含むかで振り分ける）
+//   read: false にすると写真の読み取り対象から外す（手入力のみ）
+//   list: true=一覧に出す / 'summary'=明細要約として出す
+//   search: true=検索対象 / sort: true=一覧の並び順キー / hint: 伝票上の位置の説明（読み取りプロンプトに渡る）
+const FIELDS = [
+  { key: 'kind',     label: '種別',     type: 'text',     read: true, list: true, options: ['納品', '返品'], hint: '伝票の見出し。「納品書」なら 納品、「返品伝票」なら 返品 と書く' },
+  { key: 'slipDate', label: '伝票日付', type: 'date',     read: true, list: true, sort: true, hint: '納品日・伝票の日付。年が書かれていなければ年は書かない' },
+  { key: 'supplier', label: '取引先',   type: 'text',     read: true, list: true, search: true, hint: '伝票を発行した会社名（宛先の店名ではない）。「有限会社」「(有)」などはそのまま' },
+  { key: 'items',    label: '明細',     type: 'items',    read: true, list: 'summary', hint: '明細行を上から順に全部。金額欄が ¥0 だけの空行は書かない。値引きの行も1行として書く' },
+  { key: 'subtotal', label: '小計',     type: 'yen',      read: true, hint: '表の下の「小計」' },
+  { key: 'tax',      label: '消費税',   type: 'yen',      read: true, hint: '表の下の「消費税」' },
+  { key: 'total',    label: '合計',     type: 'yen',      read: true, list: true, hint: '表の下の「合計」（税込）' },
+  { key: 'memo',     label: '備考',     type: 'textarea', read: false },
+];
+const ITEM_FIELDS = [
+  { key: 'origin',    label: '産地', type: 'text' },
+  { key: 'name',      label: '品名', type: 'text' },
+  { key: 'qty',       label: '数量', type: 'int' },
+  { key: 'unitPrice', label: '単価', type: 'yen' },
+  { key: 'amount',    label: '金額', type: 'yen' },
+];
+// FIELDS-END
+
+const STATUS_LABELS = { active: '有効', void: '取消' };
+const KIND_CLASS = { '納品': 'nouhin', '返品': 'henpin' };
+const TAX_RATE = 0.08;          // 野菜・果物は軽減税率。検算で使う（端数は切り捨て・四捨五入のどちらでも可とする）
+const CONF_WARN = 0.7;          // これ未満の confidence は「要確認」
+const ACTIVE_MONTHS = 3;        // 同期対象にする直近の月数
+const LOCAL_MONTHS_MAX = 6;     // 端末に保持する月数（同期有効時のみ古い月を捨てる）
+// ショートカットから届いた文字で、検算がすべて合い要確認も無ければ確認画面を出さずに登録する
+const AUTO_SAVE_WHEN_CLEAN = true;
+
+// クラウド同期（Firebase Realtime Database / REST のみ）。SETUP.md の手順で設定する。空なら同期無効
+const SYNC_DB_URL = 'https://shiire-sync-default-rtdb.asia-southeast1.firebasedatabase.app';
+
+// ===== 状態 =====
+// store.months[YYYY-MM] = { version, gen, events[] }（YYYY-MM は登録した月。集計は伝票日付の月で行う）
+//   events[] = { uid, rid, type:'create'|'edit'|'status', at, by, data }
+//   伝票レコードはイベント列から buildRecords() で導出する（直接は書き換えない）
+let store = load();
+let records = {};          // rid → record（buildRecords の結果）
+let operator = loadOperator();
+let extraMonths = new Set(); // 「古い月を読み込む」で一時的に同期対象にした月（セッション中のみ）
+
+function emptyMonth() { return { version: APP_VERSION, gen: 0, events: [] }; }
+
+function newUid() {
+  const rand = (crypto.randomUUID ? crypto.randomUUID().slice(0, 8) : Math.random().toString(36).slice(2, 10));
+  return Date.now().toString(36) + '-' + rand;
+}
+
+// RTDB は空オブジェクト・空配列・空文字を保存しないため、欠落を補完してから使う
+function normalizeMonth(m) {
+  if (!m || typeof m !== 'object') return null;
+  if (!Array.isArray(m.events)) m.events = [];
+  if (!Number.isInteger(m.gen)) m.gen = 0;
+  m.version = APP_VERSION;
+  m.events = m.events.filter(ev => ev && typeof ev === 'object' && ev.uid && ev.rid && ev.type && ev.at);
+  m.events.forEach(ev => {
+    if (typeof ev.by !== 'string') ev.by = '';
+    if (!ev.data || typeof ev.data !== 'object') ev.data = {};
+    if (ev.type === 'create') {
+      if (!ev.data.fields || typeof ev.data.fields !== 'object') ev.data.fields = {};
+      if (!Array.isArray(ev.data.items)) ev.data.items = [];
+    } else if (ev.type === 'edit') {
+      if (!ev.data.changes || typeof ev.data.changes !== 'object') ev.data.changes = {};
+    }
+  });
+  return m;
+}
+
+function normalizeStore(s) {
+  if (!s || typeof s !== 'object' || !s.months || typeof s.months !== 'object') return null;
+  const out = { version: APP_VERSION, months: {} };
+  Object.keys(s.months).forEach(ym => {
+    if (!/^\d{4}-\d{2}$/.test(ym)) return;
+    const m = normalizeMonth(s.months[ym]);
+    if (m) out.months[ym] = m;
+  });
+  return out;
+}
+
+function load() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return { version: APP_VERSION, months: {} };
+    return normalizeStore(JSON.parse(raw)) || { version: APP_VERSION, months: {} };
+  } catch (e) {
+    return { version: APP_VERSION, months: {} };
+  }
+}
+
+function saveLocalOnly() { localStorage.setItem(STORAGE_KEY, JSON.stringify(store)); }
+function save() { saveLocalOnly(); scheduleSync(); }
+
+// ===== ユーティリティ =====
+const fmt = n => Number(n || 0).toLocaleString('ja-JP');
+const WEEKDAYS = ['日', '月', '火', '水', '木', '金', '土'];
+const pad2 = n => String(n).padStart(2, '0');
+const toHalf = s => String(s == null ? '' : s)
+  .replace(/[！-～]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).replace(/　/g, ' ');
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => el.classList.remove('show'), 2400);
+}
+
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+    ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// ローカル日付 YYYY-MM-DD
+function isoDate(dt) { return `${dt.getFullYear()}-${pad2(dt.getMonth() + 1)}-${pad2(dt.getDate())}`; }
+function todayIso() { return isoDate(new Date()); }
+function addDays(iso, n) { const d = new Date(iso + 'T00:00:00'); d.setDate(d.getDate() + n); return isoDate(d); }
+function ymOf(iso) { return iso.slice(0, 7); } // 'YYYY-MM-DD…' → 'YYYY-MM'
+function ymNow() { return ymOf(todayIso()); }
+function ymAdd(ym, n) { const [y, m] = ym.split('-').map(Number); const d = new Date(y, m - 1 + n, 1); return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`; }
+function ymLabel(ym) { return ym.replace('-', '年') + '月'; }
+
+// 例: 12/24（水）
+function fmtShortDay(iso) {
+  if (!iso) return '';
+  const d = new Date(iso + 'T00:00:00');
+  if (isNaN(d)) return iso;
+  return `${d.getMonth() + 1}/${d.getDate()}（${WEEKDAYS[d.getDay()]}）`;
+}
+// 例: 2026/07/16（木）
+function fmtDay(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return String(iso || '');
+  return `${d.getFullYear()}/${pad2(d.getMonth() + 1)}/${pad2(d.getDate())}（${WEEKDAYS[d.getDay()]}）`;
+}
+// 例: 2026/07/16（木） 21:35
+function fmtDate(iso) {
+  const d = new Date(iso);
+  if (isNaN(d)) return String(iso || '');
+  return `${fmtDay(iso)} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+function updateClock() {
+  const dt = new Date();
+  document.getElementById('clock').textContent =
+    `${fmtDay(dt.toISOString())} ${pad2(dt.getHours())}:${pad2(dt.getMinutes())}:${pad2(dt.getSeconds())}`;
+}
+
+// 電話番号は数字だけにして保存する（比較・検索のため）。表示もそのまま
+function normalizePhone(v) { return toHalf(v).replace(/\D/g, ''); }
+function phoneLooksOdd(digits) { return digits.length > 0 && digits.length !== 10 && digits.length !== 11; }
+
+// 「12/24」「12月24日(火)」「2026/12/24」「R8.12.24」→ { iso, yearFilled }。読めなければ null。
+// 年が無い場合は今日から前後半年の範囲で最も近い年を採る（読み手に年を補わせない＝転記規律）
+function parseDateJa(raw, ref) {
+  const s = toHalf(raw).trim();
+  if (!s) return null;
+  const refD = ref ? new Date(ref + 'T00:00:00') : new Date();
+  const mk = (y, mo, d, yearFilled) => {
+    if (mo < 1 || mo > 12 || d < 1 || d > 31) return null;
+    const dt = new Date(y, mo - 1, d);
+    if (dt.getMonth() !== mo - 1) return null;
+    return { iso: isoDate(dt), yearFilled };
+  };
+  let m = s.match(/^(\d{4})\s*[\/\-.年]\s*(\d{1,2})\s*[\/\-.月]\s*(\d{1,2})/);
+  if (m) return mk(+m[1], +m[2], +m[3], false);
+  m = s.match(/^(?:R|令和)\s*(\d{1,2})\s*[\/\-.年]\s*(\d{1,2})\s*[\/\-.月]\s*(\d{1,2})/i);
+  if (m) return mk(2018 + (+m[1]), +m[2], +m[3], false);
+  m = s.match(/^(\d{1,2})\s*[\/\-.月]\s*(\d{1,2})/);
+  if (m) {
+    const mo = +m[1], d = +m[2];
+    let y = refD.getFullYear();
+    const cand = new Date(y, mo - 1, d);
+    const diffDays = (cand - refD) / 86400000;
+    if (diffDays > 183) y -= 1; else if (diffDays < -183) y += 1;
+    return mk(y, mo, d, true);
+  }
+  return null;
+}
+
+// ===== 操作者 =====
+function loadOperator() {
+  const v = localStorage.getItem(OPERATOR_KEY);
+  return OPERATORS.includes(v) ? v : '';
+}
+function setOperator(name) {
+  operator = name;
+  localStorage.setItem(OPERATOR_KEY, name);
+  renderOperatorChip();
+}
+function renderOperatorChip() {
+  document.getElementById('operatorChip').textContent = '👤 ' + (operator || '未設定');
+}
+function requireOperator() {
+  if (operator) return true;
+  toast('先に入力する人の名前を選んでください');
+  openOperatorDialog();
+  return false;
+}
+function openOperatorDialog() {
+  const box = document.getElementById('operatorBtns');
+  box.innerHTML = '';
+  OPERATORS.forEach(name => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'btn secondary' + (name === operator ? ' selected' : '');
+    btn.textContent = name;
+    btn.addEventListener('click', () => {
+      setOperator(name);
+      closeOperatorDialog();
+      toast(`操作者を「${name}」に設定しました`);
+    });
+    box.appendChild(btn);
+  });
+  document.getElementById('operatorOverlay').classList.add('show');
+}
+function closeOperatorDialog() { document.getElementById('operatorOverlay').classList.remove('show'); }
+
+// ===== イベントとレコード =====
+const SCALAR_FIELDS = FIELDS.filter(f => f.type !== 'items');
+const ITEMS_FIELD = FIELDS.find(f => f.type === 'items');
+
+function defaultValue(type) { return (type === 'yen' || type === 'int' || type === 'bool') ? null : ''; }
+
+// 保存用に空値を落とす（RTDB の容量節約。読み出し側で補完する）
+function compactFields(fields) {
+  const out = {};
+  SCALAR_FIELDS.forEach(f => {
+    const v = fields[f.key];
+    if (v === '' || v == null) return;
+    out[f.key] = v;
+  });
+  return out;
+}
+function compactItems(items) {
+  return (items || []).map(row => {
+    const o = {};
+    ITEM_FIELDS.forEach(c => { const v = row[c.key]; if (v !== '' && v != null) o[c.key] = v; });
+    return o;
+  }).filter(o => Object.keys(o).length > 0);
+}
+function fullFields(fields) {
+  const out = {};
+  SCALAR_FIELDS.forEach(f => {
+    const v = fields ? fields[f.key] : undefined;
+    out[f.key] = (v === undefined || v === null || v === '') ? defaultValue(f.type) : v;
+  });
+  return out;
+}
+function fullItems(items) {
+  return (items || []).map(row => {
+    const o = {};
+    ITEM_FIELDS.forEach(c => { const v = row ? row[c.key] : undefined; o[c.key] = (v === undefined || v === null || v === '') ? defaultValue(c.type) : v; });
+    return o;
+  });
+}
+
+function monthOf(ym, create) {
+  if (!store.months[ym] && create) store.months[ym] = emptyMonth();
+  return store.months[ym] || null;
+}
+
+// イベントを追加する。at は月内で単調増加させる（同一ミリ秒だとマージ後の並びが入れ替わるため）
+function addEvent(ym, ev) {
+  const month = monthOf(ym, true);
+  let at = new Date().toISOString();
+  const prev = month.events[month.events.length - 1];
+  if (prev && at <= prev.at) at = new Date(new Date(prev.at).getTime() + 1).toISOString();
+  const full = { uid: newUid(), at, by: operator, ...ev };
+  month.events.push(full);
+  save();
+  renderAll();
+  return full;
+}
+
+function createRecord({ fields, items, read }) {
+  const ym = ymNow();
+  const rid = newUid();
+  const data = { fields: compactFields(fields), items: compactItems(items) };
+  if (read) data.read = read;
+  addEvent(ym, { rid, type: 'create', data });
+  return rid;
+}
+
+function editRecord(rid, changes) {
+  const rec = records[rid];
+  if (!rec || !Object.keys(changes).length) return null;
+  return addEvent(rec.ym, { rid, type: 'edit', data: { changes } });
+}
+
+function setStatus(rid, to, note) {
+  const rec = records[rid];
+  if (!rec || rec.status === to) return null;
+  const data = { from: rec.status, to };
+  if (note) data.note = note;
+  return addEvent(rec.ym, { rid, type: 'status', data });
+}
+
+function sortEvents(events) {
+  return events.slice().sort((a, b) =>
+    a.at < b.at ? -1 : a.at > b.at ? 1 : a.uid < b.uid ? -1 : a.uid > b.uid ? 1 : 0);
+}
+
+// 全月のイベント列を at 順に畳み込んで rid → レコードを作る（純関数）
+function buildRecords(months) {
+  const out = {};
+  const all = [];
+  Object.keys(months).forEach(ym => months[ym].events.forEach(ev => all.push({ ev, ym })));
+  sortEvents(all.map(x => Object.assign({ _ym: x.ym }, x.ev))).forEach(ev => {
+    if (ev.type === 'create') {
+      if (out[ev.rid]) return; // 同じ rid の create が二重に来ても先勝ち
+      out[ev.rid] = {
+        rid: ev.rid, ym: ev._ym, status: 'active',
+        fields: fullFields(ev.data.fields), items: fullItems(ev.data.items),
+        read: ev.data.read || null,
+        createdAt: ev.at, createdBy: ev.by, updatedAt: ev.at, updatedBy: ev.by,
+        history: [ev],
+      };
+      return;
+    }
+    const rec = out[ev.rid];
+    if (!rec) return; // create より前に届いた edit/status は無視（次の同期で揃う）
+    if (ev.type === 'edit') {
+      Object.keys(ev.data.changes).forEach(k => {
+        const ch = ev.data.changes[k] || {};
+        if (k === (ITEMS_FIELD && ITEMS_FIELD.key)) rec.items = fullItems(ch.to);
+        else if (SCALAR_FIELDS.some(f => f.key === k)) {
+          const f = SCALAR_FIELDS.find(x => x.key === k);
+          rec.fields[k] = (ch.to === undefined || ch.to === null || ch.to === '') ? defaultValue(f.type) : ch.to;
+        }
+      });
+    } else if (ev.type === 'status') {
+      if (STATUS_LABELS[ev.data.to]) rec.status = ev.data.to;
+    }
+    rec.updatedAt = ev.at; rec.updatedBy = ev.by;
+    rec.history.push(ev);
+  });
+  return out;
+}
+
+// 数量・単価・金額のうち1つだけ空の行を、残りの2つから埋める（単価は割り切れるときだけ）
+function completeItem(r) {
+  const o = Object.assign({}, r);
+  if (o.amount == null && o.qty != null && o.unitPrice != null) o.amount = o.qty * o.unitPrice;
+  else if (o.unitPrice == null && o.qty && o.amount != null && o.amount % o.qty === 0) o.unitPrice = o.amount / o.qty;
+  return o;
+}
+
+// 行の金額。金額欄が空なら 数量×単価 で代用する
+function rowAmount(r) {
+  if (r.amount != null && r.amount !== '') return Number(r.amount) || 0;
+  return (Number(r.qty) || 0) * (Number(r.unitPrice) || 0);
+}
+function itemsTotal(items) {
+  return (items || []).reduce((s, r) => s + rowAmount(r), 0);
+}
+function itemsSummary(items) {
+  const rows = (items || []).filter(r => r.name);
+  if (!rows.length) return '';
+  const first = rows[0];
+  const q = first.qty ? `×${first.qty}` : '';
+  return `${first.name}${q}` + (rows.length > 1 ? ` ほか${rows.length - 1}品` : '');
+}
+
+// 伝票の税込合計。合計欄が空なら 小計＋税 で代用する。どちらも無ければ null
+function slipTotal(fields) {
+  if (fields.total != null) return fields.total;
+  if (fields.subtotal != null && fields.tax != null) return fields.subtotal + fields.tax;
+  return null;
+}
+// 支払額への符号付き寄与（納品は＋、返品は−）。種別不明・金額不明は null
+function signedTotal(rec) {
+  const t = slipTotal(rec.fields);
+  if (t == null) return null;
+  if (rec.fields.kind === '納品') return t;
+  if (rec.fields.kind === '返品') return -t;
+  return null;
+}
+
+// 検算（読み取り側には計算させず、ここで行う）。ずれの説明の配列を返す（空なら一致）
+//   rowIssues[i] は i 行目のずれ。伝票全体のずれは issues に入る
+function slipChecks(fields, items) {
+  const issues = [];
+  const rowIssues = [];
+  (items || []).forEach((r, i) => {
+    if (r.qty != null && r.unitPrice != null && r.amount != null && r.qty * r.unitPrice !== r.amount) {
+      const msg = `${r.qty}×${fmt(r.unitPrice)}＝${fmt(r.qty * r.unitPrice)} なのに金額は ${fmt(r.amount)}`;
+      rowIssues[i] = msg;
+      issues.push(`${i + 1}行目（${r.name || '品名なし'}）: ${msg}`);
+    }
+  });
+  const sum = itemsTotal(items);
+  const { subtotal, tax, total } = fields;
+  if (subtotal != null && (items || []).length && sum !== subtotal) issues.push(`明細の合計 ${fmt(sum)} と小計 ${fmt(subtotal)} が合いません（差 ${fmt(subtotal - sum)}）`);
+  if (subtotal != null && tax != null) {
+    const ok = [Math.floor(subtotal * TAX_RATE), Math.round(subtotal * TAX_RATE)];
+    if (!ok.includes(tax)) issues.push(`小計 ${fmt(subtotal)} の${Math.round(TAX_RATE * 100)}%は ${fmt(ok[0])} ですが、税は ${fmt(tax)}`);
+  }
+  if (subtotal != null && tax != null && total != null && subtotal + tax !== total) issues.push(`小計＋税＝${fmt(subtotal + tax)} ですが、合計は ${fmt(total)}`);
+  if (!fields.kind) issues.push('種別（納品／返品）が未入力です');
+  if (slipTotal(fields) == null) issues.push('合計が未入力です（月次の支払額に入りません）');
+  return { issues, rowIssues };
+}
+
+// ===== 文字認識テキストの解析 =====
+// iPhone の「画像からテキストを抽出」（ショートカット）やテキスト認識表示の出力を、伝票の項目に組み立てる。
+// 認識結果は「品名の列 → 数量の列 → 単価の列 → 金額の列」のように列ごとに並ぶことも、1行ずつ並ぶこともある。
+// 文字の種類（品名・数量・¥金額）ごとに上から集め、何番目かで行を組み立てる。並び方は検算が最も合うものを選ぶ。
+// 計算で値を作るのは「数量・単価・金額のうち1つだけ欠けた行」の補完だけで、補完した行は要確認にする。
+const OCR_LABELS = new Set(['納品書', '返品伝票', '産地', '摘要', '品名', '残数', '数量', '単価', '金額', '小', '小計', '消費税', '合計', '合計金額', '納品日', '計']);
+const OCR_SKIP = /TEL|FAX|〒|担当|件名|下記|様$|致します|セブン|税込|[都道府県市区町村].*\d|\d+-\d+/;
+const KANA_KANJI = /[぀-ヿ㐀-鿿]/;
+const OCR_CONF_OK = 0.95;
+const OCR_CONF_LOW = 0.5;
+
+function ocrTokens(text) {
+  const tokens = [];
+  String(text || '').split(/\r?\n/).forEach(line => {
+    const s = toHalf(line).replace(/[￥\\]/g, '¥').replace(/¥\s+/g, '¥').replace(/\s+/g, ' ').trim();
+    if (!s) return;
+    // 1行に 品名・数量・金額 が並ぶ形は空白で切る。日付・住所・電話の行は切らない
+    if (/\d/.test(s) && / /.test(s) && !/年|月|日|TEL|FAX|〒|-/.test(s)) s.split(' ').forEach(t => tokens.push(t));
+    else tokens.push(s);
+  });
+  return tokens;
+}
+
+function parseOcrText(text) {
+  const out = { kind: null, slipDate: null, supplier: null, items: [], subtotal: null, tax: null, total: null, confidence: {}, notes: null };
+  const names = [], qtys = [], yens = []; // yens の null は「数字を含むが読めなかった金額」
+  let originMarks = 0;
+  ocrTokens(text).forEach(t => {
+    if (!out.kind && /納品書/.test(t)) out.kind = '納品';
+    if (!out.kind && /返品/.test(t)) out.kind = '返品';
+    const d = t.match(/(\d{4}\s*年\s*)?\d{1,2}\s*月\s*\d{1,2}\s*日/);
+    if (d) { if (!out.slipDate) out.slipDate = d[0].replace(/\s/g, ''); return; }
+    if (/有限会社|株式会社|合同会社|\((有|株)\)|㈲|㈱/.test(t) && !/セブン/.test(t)) { if (!out.supplier) out.supplier = t; return; }
+    if (OCR_SKIP.test(t) || OCR_LABELS.has(t) || /納品書|返品伝票/.test(t)) return;
+    let m;
+    if ((m = t.match(/^¥([\d,]+)$/))) { const v = parseInt(m[1].replace(/,/g, ''), 10); if (v) yens.push(v); return; } // ¥0 は空行
+    if (/^\d{1,4}$/.test(t)) { qtys.push(parseInt(t, 10)); return; }
+    if (/^[A-Za-z]{1,3}$/.test(t)) { originMarks++; return; }
+    if (/\d/.test(t)) {
+      // 数字を含むが読めない（逆さ読み等）。「0夫」のような短い0だけのものは ¥0 の空行とみなす
+      if (/[1-9]/.test(t) || t.length > 2) yens.push(null);
+      return;
+    }
+    if (KANA_KANJI.test(t)) names.push(t);
+  });
+
+  // 末尾の 小計・消費税・合計（小計＋税＝合計 になる3つ組を後ろから探す）
+  for (let i = yens.length - 3; i >= 0; i--) {
+    const [a, b, c] = yens.slice(i, i + 3);
+    if (a != null && b != null && c != null && a + b === c) {
+      out.subtotal = a; out.tax = b; out.total = c;
+      yens.splice(i, 3);
+      break;
+    }
+  }
+  // 伝票上部の「合計金額」は明細ではない
+  if (out.total != null) { const k = yens.indexOf(out.total); if (k >= 0) yens.splice(k, 1); }
+
+  // 単価と金額の並び方の候補: 列ごと（金額の列を末尾に合わせる／単価の列を先頭に合わせる）・1行ずつ交互
+  const n = names.length;
+  const cands = [];
+  if (yens.length >= n) {
+    cands.push({ P: yens.slice(0, yens.length - n), A: yens.slice(yens.length - n) });
+    cands.push({ P: yens.slice(0, n), A: yens.slice(n) });
+  }
+  cands.push({ P: yens.filter((_, i) => i % 2 === 0), A: yens.filter((_, i) => i % 2 === 1) });
+  const score = c => names.reduce((sc, _, i) =>
+    sc + (qtys[i] != null && c.P[i] != null && c.A[i] != null && qtys[i] * c.P[i] === c.A[i] ? 1 : 0), 0);
+  const best = cands.reduce((a, b) => (score(b) > score(a) ? b : a));
+
+  let filled = 0;
+  out.items = names.map((name, i) => {
+    const qty = qtys[i] != null ? qtys[i] : null;
+    let unitPrice = best.P[i] != null ? best.P[i] : null;
+    let amount = best.A[i] != null ? best.A[i] : null;
+    let conf = (qty != null && unitPrice != null && amount != null && qty * unitPrice === amount) ? OCR_CONF_OK : OCR_CONF_LOW;
+    if (qty && unitPrice == null && amount != null && amount % qty === 0) { unitPrice = amount / qty; filled++; }
+    else if (qty != null && unitPrice != null && amount == null) { amount = qty * unitPrice; filled++; }
+    return { origin: null, name, qty, unitPrice, amount, confidence: conf };
+  });
+
+  FIELDS.filter(f => f.read !== false && f.type !== 'items').forEach(f => {
+    out.confidence[f.key] = out[f.key] != null ? OCR_CONF_OK : OCR_CONF_LOW;
+  });
+  const unread = yens.filter(v => v == null).length;
+  const notes = [`iPhone の文字認識: 品名${n}・数量${qtys.length}・金額${yens.length}（明細${n}行なら${n * 2}個）`];
+  if (unread) notes.push(`読めなかった金額 ${unread}個`);
+  if (filled) notes.push(`数量・単価・金額から補った値 ${filled}個`);
+  if (originMarks) notes.push(`産地欄の記号 ${originMarks}個は行を特定できないため未入力`);
+  out.notes = notes.join('・');
+  return out;
+}
+
+// ===== 入力フォーム（新規・読み取り確認・修正で共用） =====
+// renderForm(container, { initial: {fields, items}, read: 読み取り結果 or null })
+//   → { values(), initialValues, unseenFlags() }
+function renderForm(container, { initial, read }) {
+  container.innerHTML = '';
+  const flagged = new Map(); // key → 理由（要確認 / 読めず / 年を補完 / 桁数）
+  const seen = new Set();
+  const init = { fields: fullFields(initial && initial.fields), items: fullItems(initial && initial.items) };
+  const rawText = {};
+
+  // 読み取り結果 → 初期値に変換
+  if (read) {
+    SCALAR_FIELDS.forEach(f => {
+      if (f.read === false) return; // 読み取り対象外（手入力のみ）の項目は印を付けない
+      const v = read[f.key];
+      const conf = read.confidence ? Number(read.confidence[f.key]) : NaN;
+      const lowConf = !(conf >= CONF_WARN);
+      if (v === null || v === undefined) {
+        init.fields[f.key] = defaultValue(f.type);
+        if (lowConf) flagged.set(f.key, '読めず');
+        return;
+      }
+      if (f.type === 'date') {
+        rawText[f.key] = String(v);
+        const p = parseDateJa(v);
+        init.fields[f.key] = p ? p.iso : '';
+        if (!p) flagged.set(f.key, '日付として読めず');
+        else if (p.yearFilled) flagged.set(f.key, '年を補完');
+      } else if (f.type === 'tel') {
+        init.fields[f.key] = normalizePhone(v);
+        if (phoneLooksOdd(init.fields[f.key])) flagged.set(f.key, '桁数が合わない');
+      } else if (f.type === 'yen' || f.type === 'int') {
+        const n = parseInt(toHalf(v).replace(/[^\d-]/g, ''), 10);
+        init.fields[f.key] = Number.isInteger(n) ? n : null;
+        if (!Number.isInteger(n)) flagged.set(f.key, '数値として読めず');
+      } else if (f.options) {
+        const s = String(v);
+        const opt = f.options.find(o => s.includes(o)) || f.options.find(o => s.includes(o[0]));
+        init.fields[f.key] = opt || '';
+        rawText[f.key] = s;
+        if (!opt) flagged.set(f.key, '判別できず');
+      } else if (f.type === 'bool') {
+        init.fields[f.key] = v === true ? true : v === false ? false : null;
+      } else {
+        init.fields[f.key] = String(v).trim(); // 文字項目は全角のまま（氏名・備考の表記を変えない）
+      }
+      if (lowConf && !flagged.has(f.key)) flagged.set(f.key, '要確認');
+    });
+    if (ITEMS_FIELD) {
+      const rows = Array.isArray(read[ITEMS_FIELD.key]) ? read[ITEMS_FIELD.key] : [];
+      init.items = rows.map((r, i) => {
+        const o = {};
+        ITEM_FIELDS.forEach(c => {
+          const v = r ? r[c.key] : null;
+          if (c.type === 'yen' || c.type === 'int') { const n = parseInt(toHalf(v == null ? '' : v).replace(/[^\d-]/g, ''), 10); o[c.key] = Number.isInteger(n) ? n : null; }
+          else o[c.key] = v == null ? '' : String(v).trim();
+        });
+        if (!(Number(r && r.confidence) >= CONF_WARN)) flagged.set(`${ITEMS_FIELD.key}[${i}]`, '要確認');
+        return o;
+      });
+    }
+  }
+  if (!init.items.length) init.items.push(fullItems([{}])[0]);
+
+  const inputs = {};
+  let itemsBox = null;
+  SCALAR_FIELDS.forEach(f => {
+    const wrap = document.createElement('div');
+    wrap.className = 'fw';
+    const reason = flagged.get(f.key);
+    if (reason) wrap.classList.add(reason === '読めず' ? 'unread' : 'flag');
+    const badge = reason ? `<span class="badge warn" data-badge="${f.key}">${escapeHtml(reason)}</span>` : '';
+    let inputHtml;
+    const id = 'f-' + f.key;
+    const v = init.fields[f.key];
+    if (f.type === 'textarea') inputHtml = `<textarea id="${id}">${escapeHtml(v)}</textarea>`;
+    else if (f.type === 'date') inputHtml = `<input type="date" id="${id}" value="${escapeHtml(v)}">`;
+    else if (f.type === 'tel') inputHtml = `<input type="tel" id="${id}" inputmode="numeric" value="${escapeHtml(v)}" autocomplete="off">`;
+    else if (f.type === 'yen' || f.type === 'int') inputHtml = `<input type="number" id="${id}" inputmode="numeric" step="1" value="${v == null ? '' : v}">`;
+    else if (f.type === 'bool') inputHtml = `<select id="${id}"><option value=""${v == null ? ' selected' : ''}>未記入</option><option value="1"${v === true ? ' selected' : ''}>はい</option><option value="0"${v === false ? ' selected' : ''}>いいえ</option></select>`;
+    else if (f.options) inputHtml = `<select id="${id}"><option value=""${!v ? ' selected' : ''}>選んでください</option>` +
+      f.options.map(o => `<option value="${escapeHtml(o)}"${v === o ? ' selected' : ''}>${escapeHtml(o)}</option>`).join('') + `</select>`;
+    else inputHtml = `<input type="text" id="${id}" value="${escapeHtml(v)}" autocomplete="off">`;
+    wrap.innerHTML = `<label for="${id}">${escapeHtml(f.label)}${badge}</label>${inputHtml}` +
+      (rawText[f.key] ? `<div class="raw">読み取り: ${escapeHtml(rawText[f.key])}</div>` : '');
+    container.appendChild(wrap);
+    const el = wrap.querySelector('#' + id);
+    inputs[f.key] = el;
+    el.addEventListener('focus', () => { seen.add(f.key); wrap.classList.remove('flag'); wrap.classList.remove('unread'); updateFoot(); });
+    el.addEventListener('input', updateTotal);
+    el.addEventListener('change', updateTotal);
+    // 明細は「取引先」の直後に置く（伝票の見た目の順＝明細 → 小計・税・合計）
+    if (ITEMS_FIELD && f.key === 'supplier') renderItemsBlock();
+  });
+  if (ITEMS_FIELD && !itemsBox) renderItemsBlock();
+
+  const checkBox = document.createElement('div');
+  checkBox.className = 'checkbox';
+  container.appendChild(checkBox);
+
+  // 明細行: 1段目=品名、2段目=その他の列（産地・数量・単価・金額）
+  function renderItemsBlock() {
+    const wrap = document.createElement('div');
+    wrap.className = 'fw';
+    wrap.innerHTML = `<label>${escapeHtml(ITEMS_FIELD.label)}</label><div id="itemsBody"></div>` +
+      `<button type="button" class="btn secondary" id="itemsAdd" style="margin-top:8px;">＋ 行を追加</button>` +
+      `<div class="items-total"><span>明細の合計（税抜）</span><b id="itemsTotal">0円</b></div>`;
+    container.appendChild(wrap);
+    itemsBox = wrap.querySelector('#itemsBody');
+    init.items.forEach((row, i) => addRow(row, i));
+    wrap.querySelector('#itemsAdd').addEventListener('click', () => { addRow(fullItems([{}])[0], itemsBox.children.length + 1000); updateTotal(); });
+  }
+  function itemInput(c, v) {
+    return (c.type === 'yen' || c.type === 'int')
+      ? `<input type="number" inputmode="numeric" step="1" data-k="${c.key}" value="${v == null ? '' : v}" placeholder="${c.type === 'int' ? '1' : '0'}">`
+      : `<input type="text" data-k="${c.key}" value="${escapeHtml(v)}" autocomplete="off" placeholder="${escapeHtml(c.label)}">`;
+  }
+  function addRow(row, idx) {
+    const div = document.createElement('div');
+    div.className = 'item-row';
+    const key = `${ITEMS_FIELD.key}[${idx}]`;
+    if (flagged.has(key)) div.classList.add('flag');
+    const top = ITEM_FIELDS.find(c => c.key === 'name');
+    const rest = ITEM_FIELDS.filter(c => c !== top);
+    div.innerHTML = `<div class="ir-top">${top ? itemInput(top, row[top.key]) : ''}<button type="button" class="rm" title="この行を消す">×</button></div>` +
+      `<div class="ir-nums">${rest.map(c => `<div><label>${escapeHtml(c.label)}</label>${itemInput(c, row[c.key])}</div>`).join('')}</div>` +
+      `<div class="ir-check"></div>`;
+    div.querySelector('button.rm').addEventListener('click', () => { div.remove(); if (!itemsBox.children.length) addRow(fullItems([{}])[0], 0); updateTotal(); updateFoot(); });
+    div.querySelectorAll('input').forEach(inp => {
+      inp.addEventListener('input', () => { completeRow(div); updateTotal(); });
+      inp.addEventListener('focus', () => { seen.add(key); div.classList.remove('flag'); updateFoot(); });
+    });
+    itemsBox.appendChild(div);
+    completeRow(div);
+  }
+  // 数量・単価・金額のうち1つだけ空なら、残りの2つから求めた値を見本（placeholder）に出す。
+  // 値そのものは入れない（入れると、その欄に打った数字が後ろにつながるため）。保存時に completeItem で埋める
+  function completeRow(div) {
+    const el = k => div.querySelector(`input[data-k="${k}"]`);
+    const p = el('unitPrice'), a = el('amount');
+    if (!p || !a) return;
+    const o = completeItem(rowValues(div));
+    p.placeholder = p.value.trim() === '' && o.unitPrice != null ? String(o.unitPrice) : '0';
+    a.placeholder = a.value.trim() === '' && o.amount != null ? String(o.amount) : '0';
+  }
+  function rowValues(tr) {
+    const o = {};
+    ITEM_FIELDS.forEach(c => {
+      const inp = tr.querySelector(`input[data-k="${c.key}"]`);
+      const raw = inp ? inp.value : '';
+      if (c.type === 'yen' || c.type === 'int') { const n = parseInt(toHalf(raw), 10); o[c.key] = Number.isInteger(n) ? n : null; }
+      else o[c.key] = String(raw).trim();
+    });
+    return o;
+  }
+
+  function readItems() {
+    if (!itemsBox) return [];
+    return Array.from(itemsBox.querySelectorAll('.item-row')).map(tr => completeItem(rowValues(tr)))
+      .filter(o => ITEM_FIELDS.some(c => o[c.key] !== '' && o[c.key] != null));
+  }
+  // 明細合計の表示と検算。空行（readItems で落ちる）があっても行番号がずれないよう、画面の行ごとに見る
+  function updateTotal() {
+    if (!itemsBox) return;
+    const items = readItems();
+    const el = container.querySelector('#itemsTotal');
+    if (el) el.textContent = fmt(itemsTotal(items)) + '円';
+    const { issues, rowIssues } = slipChecks(values().fields, items);
+    const rows = Array.from(itemsBox.querySelectorAll('.item-row')).filter(tr =>
+      Array.from(tr.querySelectorAll('input')).some(inp => inp.value.trim() !== ''));
+    itemsBox.querySelectorAll('.ir-check').forEach(x => { x.textContent = ''; });
+    rows.forEach((tr, i) => { if (rowIssues[i]) tr.querySelector('.ir-check').textContent = '⚠ ' + rowIssues[i]; });
+    checkBox.className = 'checkbox ' + (issues.length ? 'ng' : 'ok');
+    checkBox.innerHTML = issues.length
+      ? `<b>検算 ⚠ ${issues.length}件</b><br>` + issues.map(escapeHtml).join('<br>') + '<br>写真と見比べて直してください（伝票自体の誤りならそのまま保存して構いません）。'
+      : '<b>検算 ✓</b> 各行の金額・小計・税・合計がすべて合っています。';
+  }
+  function values() {
+    const fields = {};
+    SCALAR_FIELDS.forEach(f => {
+      const el = inputs[f.key];
+      const raw = el.value;
+      if (f.type === 'yen' || f.type === 'int') { const n = parseInt(toHalf(raw), 10); fields[f.key] = Number.isInteger(n) ? n : null; }
+      else if (f.type === 'bool') fields[f.key] = raw === '1' ? true : raw === '0' ? false : null;
+      else if (f.options) fields[f.key] = f.options.includes(raw) ? raw : '';
+      else if (f.type === 'tel') fields[f.key] = normalizePhone(raw);
+      else fields[f.key] = String(raw).trim(); // 文字項目は入力どおり（全角を半角にしない）
+    });
+    return { fields, items: readItems() };
+  }
+  function unseenFlags() {
+    return Array.from(flagged.keys()).filter(k => !seen.has(k)).map(k => {
+      const f = SCALAR_FIELDS.find(x => x.key === k);
+      if (f) return f.label;
+      const m = k.match(/\[(\d+)\]$/);
+      return `${ITEMS_FIELD.label} ${m ? (+m[1] + 1) + '行目' : ''}`;
+    });
+  }
+  function updateFoot() {
+    const foot = document.getElementById('formFoot');
+    if (!foot) return;
+    const rest = unseenFlags();
+    foot.textContent = rest.length ? `要確認 ${rest.length}件：${rest.join('、')}` : (flagged.size ? '要確認の項目はすべて目視しました' : '');
+  }
+  updateTotal();
+  updateFoot();
+  return {
+    values, initialValues: init, unseenFlags, flaggedKeys: () => Array.from(flagged.keys()),
+    checks: () => slipChecks(values().fields, readItems()).issues,
+    // 自動登録を止める印（年の補完は直近半年の範囲で決まるので止めない）
+    blockingFlags: () => Array.from(flagged.entries()).filter(([k, why]) => !seen.has(k) && why !== '年を補完').map(([k]) => k),
+  };
+}
+
+// ===== 入力タブ =====
+const capture = { read: null, form: null, model: null };
+
+function resetCapture() {
+  capture.read = null; capture.form = null; capture.model = null;
+  document.getElementById('formCard').hidden = true;
+  document.getElementById('formBody').innerHTML = '';
+  document.getElementById('formFoot').textContent = '';
+  setReadStatus('');
+  document.getElementById('captureCard').hidden = false;
+}
+
+function setReadStatus(html, isErr) {
+  const el = document.getElementById('readStatus');
+  el.innerHTML = html;
+  el.className = 'status-line' + (isErr ? ' err' : '');
+}
+
+function openManualForm() { openForm(null); }
+
+function openForm(read) {
+  document.getElementById('formTitle').textContent = read ? '読み取り結果の確認・修正' : '伝票の手入力';
+  capture.form = renderForm(document.getElementById('formBody'), { initial: null, read });
+  document.getElementById('formCard').hidden = false;
+  document.getElementById('btnSave').disabled = false;
+  document.getElementById('formCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// 読み取った文字 → 入力欄。auto のとき、検算がすべて合い要確認も二重登録の疑いも無ければそのまま登録する
+function applyOcrText(text, { auto } = {}) {
+  resetCapture();
+  document.getElementById('ocrText').value = text;
+  const read = parseOcrText(text);
+  if (!read.items.length && read.total == null) {
+    setReadStatus('伝票の文字が見つかりませんでした。撮り直すか、手入力してください。', true);
+    return;
+  }
+  capture.read = read; capture.model = 'iphone-ocr';
+  openForm(read);
+  const f = capture.form;
+  const clean = !f.blockingFlags().length && !f.checks().length && !findDuplicate(f.values().fields);
+  if (auto && AUTO_SAVE_WHEN_CLEAN && clean && operator) {
+    saveNewRecord('検算 ✓ のため自動で登録しました');
+    return;
+  }
+  setReadStatus(`読み取りました。黄色の項目を紙の伝票と見比べてから保存してください。<br><span class="hint">${escapeHtml(read.notes)}</span>`);
+}
+
+// ショートカットは「…/index.html#ocr=<URL エンコードした文字>」を開く。
+// ハッシュはサーバに送られない。読んだらすぐ消して、単価などを閲覧履歴に残さない
+async function takeOcrFromHash() {
+  const m = location.hash.match(/^#ocr=([\s\S]*)$/);
+  if (!m) return;
+  let text = m[1];
+  try { text = decodeURIComponent(m[1].replace(/\+/g, ' ')); } catch (e) {}
+  history.replaceState(null, '', location.pathname + location.search);
+  if (syncConfigured()) await syncNow(); // 二重登録の判定を他の端末の記録込みで行う
+  activateTab('capture');
+  if (!operator) openOperatorDialog();
+  applyOcrText(text, { auto: true });
+}
+
+function saveNewRecord(message) {
+  if (!capture.form) return;
+  if (!requireOperator()) return;
+  const { fields, items } = capture.form.values();
+  const hasAny = SCALAR_FIELDS.some(f => fields[f.key] !== '' && fields[f.key] != null) || items.length;
+  if (!hasAny) { toast('何も入力されていません'); return; }
+  const unseen = capture.form.unseenFlags();
+  if (unseen.length && !confirm(`次の項目をまだ確認していません：\n${unseen.join('、')}\nそのまま保存しますか？`)) return;
+  const issues = capture.form.checks();
+  if (issues.length && !confirm(`検算でずれが ${issues.length} 件あります：\n${issues.join('\n')}\n\n写真と見比べましたか？ このまま保存しますか？`)) return;
+  const dup = findDuplicate(fields);
+  if (dup && !confirm(`同じ日付・種別・取引先・合計の伝票がすでにあります（${fmtDate(dup.createdAt)} 登録${dup.createdBy ? '・' + dup.createdBy : ''}）。\n二重登録ではありませんか？ 別の伝票として保存しますか？`)) return;
+  let read = null;
+  if (capture.read) {
+    const initF = capture.form.initialValues.fields;
+    const fixed = SCALAR_FIELDS.filter(f => String(initF[f.key] ?? '') !== String(fields[f.key] ?? '')).map(f => f.key);
+    if (JSON.stringify(compactItems(capture.form.initialValues.items)) !== JSON.stringify(compactItems(items))) fixed.push(ITEMS_FIELD.key);
+    read = { model: capture.model || '', low: capture.form.flaggedKeys(), fixed };
+  }
+  const rid = createRecord({ fields, items, read });
+  toast(typeof message === 'string' ? message : '伝票を登録しました');
+  resetCapture();
+  activateTab('list');
+  openDetail(rid);
+}
+
+// 二重登録の疑い: 有効な伝票で 種別・伝票日付・取引先・合計 がすべて同じもの
+function findDuplicate(fields, exceptRid) {
+  const total = slipTotal(fields);
+  if (!fields.kind || !fields.slipDate || total == null) return null;
+  return Object.values(records).find(r => r.rid !== exceptRid && r.status === 'active' &&
+    r.fields.kind === fields.kind && r.fields.slipDate === fields.slipDate &&
+    slipTotal(r.fields) === total && supplierKey(r.fields.supplier) === supplierKey(fields.supplier)) || null;
+}
+// 取引先の表記ゆれ（「有限会社 テスト青果」「㈲テスト青果」）を同じ取引先として扱うためのキー
+function supplierKey(s) {
+  return toHalf(s).replace(/有限会社|株式会社|合同会社|\((有|株)\)|㈲|㈱|\s/g, '');
+}
+
+// ===== 一覧タブ =====
+const LIST_FILTERS = [
+  { key: 'all',    label: '全部' },
+  { key: 'nouhin', label: '納品' },
+  { key: 'henpin', label: '返品' },
+  { key: 'check',  label: '検算ずれ' },
+  { key: 'void',   label: '取消' },
+];
+let listFilter = 'all';
+let listQuery = '';
+
+function renderFilterChips() {
+  const box = document.getElementById('filterChips');
+  box.innerHTML = '';
+  LIST_FILTERS.forEach(f => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = f.label;
+    b.className = f.key === listFilter ? 'active' : '';
+    b.addEventListener('click', () => { listFilter = f.key; renderList(); });
+    box.appendChild(b);
+  });
+}
+
+function hasIssues(rec) { return slipChecks(rec.fields, rec.items).issues.length > 0; }
+
+function matchesFilter(rec) {
+  switch (listFilter) {
+    case 'void': return rec.status === 'void';
+    case 'nouhin': return rec.status === 'active' && rec.fields.kind === '納品';
+    case 'henpin': return rec.status === 'active' && rec.fields.kind === '返品';
+    case 'check': return rec.status === 'active' && hasIssues(rec);
+    default: return rec.status === 'active';
+  }
+}
+
+// 検索: 取引先などの search 項目と、明細の品名
+function matchesQuery(rec) {
+  if (!listQuery) return true;
+  const q = toHalf(listQuery).trim().toLowerCase();
+  if (!q) return true;
+  const inFields = FIELDS.some(f => {
+    if (!f.search) return false;
+    const v = rec.fields[f.key];
+    return v != null && v !== '' && toHalf(v).toLowerCase().includes(q);
+  });
+  return inFields || rec.items.some(r => r.name && toHalf(r.name).toLowerCase().includes(q));
+}
+
+// 伝票日付の新しい順。同じ日は 納品 → 返品、その中は登録順
+function sortedRecords() {
+  const sortKey = (FIELDS.find(f => f.sort) || {}).key;
+  return Object.values(records).sort((a, b) => {
+    const da = a.fields[sortKey] || '0000-00-00', db = b.fields[sortKey] || '0000-00-00';
+    if (da !== db) return da > db ? -1 : 1;
+    const ka = a.fields.kind || '', kb = b.fields.kind || '';
+    if (ka !== kb) return ka === '納品' ? -1 : kb === '納品' ? 1 : ka < kb ? -1 : 1;
+    return a.createdAt < b.createdAt ? -1 : 1;
+  });
+}
+
+function renderList() {
+  renderFilterChips();
+  const box = document.getElementById('recordList');
+  const today = todayIso();
+  const shown = sortedRecords().filter(r => matchesFilter(r) && matchesQuery(r));
+  if (!Object.keys(records).length) {
+    box.innerHTML = '<p class="hint" style="margin-top:12px;">まだ伝票がありません。「撮影」タブから納品書・返品伝票を読み取るか、手入力してください。</p>';
+    return;
+  }
+  if (!shown.length) {
+    box.innerHTML = '<p class="hint" style="margin-top:12px;">該当する伝票がありません。</p>';
+    return;
+  }
+  box.innerHTML = '';
+  let lastDate = null;
+  shown.forEach(rec => {
+    const sd = rec.fields.slipDate || '';
+    const dateKey = sd || '（日付なし）';
+    if (dateKey !== lastDate) {
+      lastDate = dateKey;
+      const d = document.createElement('div');
+      d.className = 'rec-date';
+      d.textContent = sd ? fmtDay(sd + 'T00:00:00') + (sd === today ? '　今日' : '') : '伝票日付なし';
+      box.appendChild(d);
+    }
+    const item = document.createElement('div');
+    item.className = 'rec-item ' + rec.status;
+    const kind = rec.fields.kind;
+    const signed = signedTotal(rec);
+    const amt = signed == null ? '—' : (signed < 0 ? '−' : '') + fmt(Math.abs(signed)) + '円';
+    item.innerHTML =
+      `<div class="when"><div class="d">${escapeHtml(sd ? fmtShortDay(sd) : '—')}</div>` +
+      `<div><span class="badge ${KIND_CLASS[kind] || 'warn'}" style="margin-left:0;">${escapeHtml(kind || '種別なし')}</span></div></div>` +
+      `<div class="who"><div class="name">${escapeHtml(rec.fields.supplier || '（取引先なし）')}</div>` +
+      `<div class="items">${escapeHtml(itemsSummary(rec.items) || '明細なし')}</div></div>` +
+      `<div class="side"><span class="amt${signed < 0 ? ' minus' : ''}">${amt}</span>` +
+      (rec.status === 'void' ? '<span class="badge void">取消</span>' : hasIssues(rec) ? '<span class="badge warn">検算ずれ</span>' : '') + `</div>`;
+    item.addEventListener('click', () => openDetail(rec.rid));
+    box.appendChild(item);
+  });
+}
+
+// 月（伝票日付の月）ごとの集計。取引先キーごとに 納品・返品 の税込合計と税抜小計を積む
+function monthSummary(ym) {
+  const bySup = new Map();
+  const unknown = [];   // 種別か合計が無く、支払額に入れられない伝票
+  let issues = 0;
+  Object.values(records).forEach(rec => {
+    if (rec.status !== 'active' || !rec.fields.slipDate || ymOf(rec.fields.slipDate) !== ym) return;
+    if (hasIssues(rec)) issues++;
+    const signed = signedTotal(rec);
+    if (signed == null) { unknown.push(rec); return; }
+    const key = supplierKey(rec.fields.supplier) || '（取引先なし）';
+    if (!bySup.has(key)) bySup.set(key, { name: rec.fields.supplier || '（取引先なし）', inTotal: 0, outTotal: 0, inSub: 0, outSub: 0, inN: 0, outN: 0 });
+    const s = bySup.get(key);
+    const sub = rec.fields.subtotal != null ? rec.fields.subtotal : itemsTotal(rec.items);
+    if (signed >= 0) { s.inTotal += signed; s.inSub += sub; s.inN++; } else { s.outTotal += -signed; s.outSub += sub; s.outN++; }
+  });
+  const rows = Array.from(bySup.values()).sort((a, b) => (b.inTotal - b.outTotal) - (a.inTotal - a.outTotal));
+  const sum = rows.reduce((t, r) => ({
+    inTotal: t.inTotal + r.inTotal, outTotal: t.outTotal + r.outTotal, inSub: t.inSub + r.inSub, outSub: t.outSub + r.outSub, inN: t.inN + r.inN, outN: t.outN + r.outN,
+  }), { inTotal: 0, outTotal: 0, inSub: 0, outSub: 0, inN: 0, outN: 0 });
+  return { rows, sum, unknown, issues };
+}
+
+function renderHeader() {
+  const m = monthSummary(ymNow());
+  document.getElementById('headerPay').textContent = fmt(m.sum.inTotal - m.sum.outTotal);
+  document.getElementById('headerCount').textContent = m.sum.inN + m.sum.outN + m.unknown.length;
+}
+
+// ===== 月次タブ =====
+function slipMonths() {
+  const set = new Set([ymNow()]);
+  Object.values(records).forEach(r => { if (r.fields.slipDate) set.add(ymOf(r.fields.slipDate)); });
+  return Array.from(set).sort().reverse();
+}
+
+function renderMonthly() {
+  const sel = document.getElementById('sumMonth');
+  const prev = sel.value;
+  const months = slipMonths();
+  sel.innerHTML = months.map(ym => `<option value="${ym}">${ymLabel(ym)}</option>`).join('');
+  sel.value = months.includes(prev) ? prev : months[0];
+  const ym = sel.value;
+  const { rows, sum, unknown, issues } = monthSummary(ym);
+  const box = document.getElementById('sumBody');
+  const pay = sum.inTotal - sum.outTotal;
+  let html = `<div class="hint" style="margin-top:14px;">${ymLabel(ym)}の差し引き支払額（税込）</div>` +
+    `<div class="pay-big">${pay < 0 ? '−' : ''}${fmt(Math.abs(pay))}円</div>` +
+    `<div class="hint">納品 ${sum.inN}枚 ${fmt(sum.inTotal)}円 − 返品 ${sum.outN}枚 ${fmt(sum.outTotal)}円</div>`;
+  if (rows.length) {
+    html += `<table class="sum-table" style="margin-top:14px;"><thead><tr><th>取引先</th><th>納品</th><th>返品</th><th>差し引き</th></tr></thead><tbody>` +
+      rows.map(r => `<tr><td>${escapeHtml(r.name)}<div class="hint" style="margin-top:0;">納品${r.inN}枚・返品${r.outN}枚</div></td>` +
+        `<td>${fmt(r.inTotal)}</td><td class="minus">${r.outTotal ? '−' + fmt(r.outTotal) : '0'}</td><td><b>${fmt(r.inTotal - r.outTotal)}</b></td></tr>`).join('') +
+      (rows.length > 1 ? `<tr class="total"><td>合計</td><td>${fmt(sum.inTotal)}</td><td class="minus">−${fmt(sum.outTotal)}</td><td>${fmt(pay)}</td></tr>` : '') +
+      `</tbody></table>` +
+      `<p class="hint" style="margin-top:8px;">税抜: 納品 ${fmt(sum.inSub)}円 − 返品 ${fmt(sum.outSub)}円 ＝ ${fmt(sum.inSub - sum.outSub)}円（税は伝票ごとに端数処理されるため、税込との差は伝票ごとの税の合計です）</p>`;
+  } else {
+    html += '<p class="hint" style="margin-top:12px;">この月の伝票はありません。</p>';
+  }
+  if (unknown.length) html += `<div class="checkbox ng">⚠ 種別または合計が未入力で、支払額に入っていない伝票が ${unknown.length}枚あります。一覧から開いて直してください。</div>`;
+  if (issues) html += `<div class="checkbox ng">⚠ 検算ずれのある伝票が ${issues}枚あります（一覧の「検算ずれ」で確認できます）。金額は伝票の合計欄の値で集計しています。</div>`;
+  box.innerHTML = html;
+}
+
+// ===== 詳細モーダル =====
+const detail = { rid: null, editing: false, form: null };
+
+function fieldDisplay(f, v) {
+  if (v == null || v === '') return '—';
+  if (f.type === 'date') return fmtDay(v + 'T00:00:00');
+  if (f.type === 'yen') return fmt(v) + '円';
+  if (f.type === 'bool') return v ? 'はい' : 'いいえ';
+  if (f.type === 'tel') return `<a href="tel:${escapeHtml(v)}">${escapeHtml(v)}</a>`;
+  return escapeHtml(v);
+}
+
+function describeEvent(ev) {
+  if (ev.type === 'create') return '登録' + (ev.data.read ? `（写真読み取り${ev.data.read.fixed && ev.data.read.fixed.length ? '・' + ev.data.read.fixed.length + '項目を修正' : ''}）` : '（手入力）');
+  if (ev.type === 'status') {
+    return `${STATUS_LABELS[ev.data.from] || ev.data.from} → ${STATUS_LABELS[ev.data.to] || ev.data.to}` + (ev.data.note ? `　${escapeHtml(ev.data.note)}` : '');
+  }
+  if (ev.type === 'edit') {
+    const parts = Object.keys(ev.data.changes).map(k => {
+      const f = FIELDS.find(x => x.key === k);
+      const ch = ev.data.changes[k] || {};
+      if (!f) return k;
+      if (f.type === 'items') return `${f.label}を変更`;
+      const show = x => (x == null || x === '') ? '空' : escapeHtml(String(x));
+      return `${f.label}: ${show(ch.from)} → ${show(ch.to)}`;
+    });
+    return '修正　' + parts.join('　');
+  }
+  return ev.type;
+}
+
+function openDetail(rid) {
+  detail.rid = rid; detail.editing = false; detail.form = null;
+  renderDetail();
+  document.getElementById('detailOverlay').classList.add('show');
+}
+function closeDetail() {
+  detail.rid = null; detail.editing = false; detail.form = null;
+  document.getElementById('detailOverlay').classList.remove('show');
+}
+
+function renderDetail() {
+  const rec = records[detail.rid];
+  const box = document.getElementById('detailModal');
+  if (!rec) { closeDetail(); return; }
+  if (detail.editing) {
+    box.innerHTML = `<h2>伝票の修正</h2><div id="detailFormBody"></div><div class="form-foot" id="formFoot"></div>` +
+      `<button class="btn ok" id="detailSave">修正を保存</button><button class="btn secondary" id="detailCancelEdit">やめる</button>`;
+    detail.form = renderForm(box.querySelector('#detailFormBody'), { initial: rec, read: null });
+    box.querySelector('#detailSave').addEventListener('click', saveDetailEdit);
+    box.querySelector('#detailCancelEdit').addEventListener('click', () => { detail.editing = false; detail.form = null; renderDetail(); });
+    return;
+  }
+  const rows = SCALAR_FIELDS.map(f => `<div class="kv"><div class="k">${escapeHtml(f.label)}</div><div class="v">${fieldDisplay(f, rec.fields[f.key])}</div></div>`).join('');
+  const items = rec.items.filter(r => ITEM_FIELDS.some(c => r[c.key] !== '' && r[c.key] != null));
+  const { issues, rowIssues } = slipChecks(rec.fields, items);
+  const cell = (c, v) => (c.type === 'yen' || c.type === 'int')
+    ? `<td class="num" style="font-size:13px; padding:4px 3px;">${v == null ? '—' : fmt(v)}</td>`
+    : `<td style="font-size:13px; padding:4px 3px;">${escapeHtml(v == null || v === '' ? '' : v)}</td>`;
+  const itemsHtml = items.length
+    ? `<table class="items-table" style="margin-top:0;"><thead><tr>${ITEM_FIELDS.map(c => `<th${c.type === 'yen' || c.type === 'int' ? ' style="text-align:right;"' : ''}>${escapeHtml(c.label)}</th>`).join('')}</tr></thead><tbody>` +
+      items.map((r, i) => `<tr${rowIssues[i] ? ' style="background:#fff8e1;"' : ''}>${ITEM_FIELDS.map(c => cell(c, r[c.key])).join('')}</tr>`).join('') +
+      `</tbody></table><div class="items-total"><span>明細の合計（税抜）</span><b>${fmt(itemsTotal(items))}円</b></div>`
+    : '<p class="hint">明細なし</p>';
+  const checkHtml = issues.length
+    ? `<div class="checkbox ng"><b>検算 ⚠ ${issues.length}件</b><br>${issues.map(escapeHtml).join('<br>')}</div>`
+    : '<div class="checkbox ok"><b>検算 ✓</b> 金額・小計・税・合計がすべて合っています。</div>';
+  const hist = rec.history.slice().reverse().map(ev =>
+    `<div class="hist-item">${describeEvent(ev)}<div class="m">${fmtDate(ev.at)}${ev.by ? '　👤 ' + escapeHtml(ev.by) : ''}</div></div>`).join('');
+  const st = rec.status;
+  const kind = rec.fields.kind;
+  box.innerHTML =
+    `<h2>${escapeHtml(rec.fields.supplier || '（取引先なし）')}<span class="badge ${KIND_CLASS[kind] || 'warn'}">${escapeHtml(kind || '種別なし')}</span>${st === 'void' ? '<span class="badge void">取消</span>' : ''}</h2>` +
+    rows +
+    `<div class="kv"><div class="k">${escapeHtml(ITEMS_FIELD ? ITEMS_FIELD.label : '明細')}</div><div class="v" style="white-space:normal;">${itemsHtml}</div></div>` +
+    checkHtml +
+    `<div class="meta">登録: ${fmtDate(rec.createdAt)}${rec.createdBy ? '　👤 ' + escapeHtml(rec.createdBy) : ''}<br>更新: ${fmtDate(rec.updatedAt)}${rec.updatedBy ? '　👤 ' + escapeHtml(rec.updatedBy) : ''}</div>` +
+    `<button class="btn secondary" id="dEdit">内容を修正</button>` +
+    (st === 'active' ? `<button class="btn secondary danger" id="dCancel">この伝票を取消</button>` : `<button class="btn secondary" id="dReopen">取消をやめて有効に戻す</button>`) +
+    `<details style="margin-top:14px;"><summary class="hint" style="cursor:pointer;">履歴（${rec.history.length}件）</summary>${hist}</details>` +
+    `<button class="btn secondary" id="dClose">閉じる</button>`;
+  const on = (id, fn) => { const el = box.querySelector('#' + id); if (el) el.addEventListener('click', fn); };
+  on('dReopen', () => {
+    if (!requireOperator()) return;
+    if (!confirm('この伝票を有効に戻しますか？（月次の集計に再び入ります）')) return;
+    setStatus(rec.rid, 'active'); toast('有効に戻しました'); renderDetail();
+  });
+  on('dCancel', () => {
+    if (!requireOperator()) return;
+    const note = prompt('取消の理由（任意。例: 二重登録）', '');
+    if (note === null) return;
+    setStatus(rec.rid, 'void', note.trim()); toast('取り消しました（履歴に残ります）'); renderDetail();
+  });
+  on('dEdit', () => { if (!requireOperator()) return; detail.editing = true; renderDetail(); });
+  on('dClose', closeDetail);
+}
+
+function saveDetailEdit() {
+  const rec = records[detail.rid];
+  if (!rec || !detail.form) return;
+  if (!requireOperator()) return;
+  const { fields, items } = detail.form.values();
+  const changes = {};
+  SCALAR_FIELDS.forEach(f => {
+    const a = rec.fields[f.key], b = fields[f.key];
+    const na = (a == null || a === '') ? '' : String(a), nb = (b == null || b === '') ? '' : String(b);
+    if (na !== nb) changes[f.key] = { from: a == null ? '' : a, to: b == null ? '' : b };
+  });
+  if (ITEMS_FIELD && JSON.stringify(compactItems(rec.items)) !== JSON.stringify(compactItems(items))) {
+    changes[ITEMS_FIELD.key] = { from: compactItems(rec.items), to: compactItems(items) };
+  }
+  if (!Object.keys(changes).length) { toast('変更はありません'); detail.editing = false; renderDetail(); return; }
+  editRecord(rec.rid, changes);
+  detail.editing = false; detail.form = null;
+  toast('修正を保存しました');
+  renderDetail();
+}
+
+// ===== 設定タブ・データ管理 =====
+function renderSettings() {
+  const sel = document.getElementById('monthSelect');
+  const prev = sel.value;
+  const months = Object.keys(store.months).sort().reverse();
+  if (!months.includes(ymNow())) months.unshift(ymNow());
+  sel.innerHTML = months.map(ym => `<option value="${ym}">${ymLabel(ym)}（${(store.months[ym] ? Object.values(buildRecords({ [ym]: store.months[ym] })).length : 0)}件）</option>`).join('');
+  if (months.includes(prev)) sel.value = prev;
+  document.getElementById('shortcutUrl').value = shortcutUrl();
+}
+
+function shortcutUrl() { return location.origin + location.pathname + '#ocr='; }
+
+function download(filename, content, mime) {
+  const blob = new Blob([content], { type: mime });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+function todayCompact() { return todayIso().replace(/-/g, ''); }
+const csvCell = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+
+// 月次タブで選んだ月（伝票日付の月）の有効な伝票
+function monthRecords() {
+  const ym = document.getElementById('sumMonth').value;
+  return { ym, recs: sortedRecords().reverse().filter(r => r.status === 'active' && r.fields.slipDate && ymOf(r.fields.slipDate) === ym) };
+}
+
+// 伝票CSV: 1伝票1行。支払額は 納品＋・返品− の符号付き
+function exportSlipsCsv() {
+  const { ym, recs } = monthRecords();
+  if (!recs.length) { toast('この月には伝票がありません'); return; }
+  const header = ['伝票日付', '種別', '取引先', '品目数', '小計', '消費税', '合計', '支払額(返品はマイナス)', '検算', '備考', '登録者', '登録日時', 'ID'];
+  const lines = recs.map(rec => {
+    const f = rec.fields;
+    const n = v => v == null ? '' : v;
+    const issues = slipChecks(f, rec.items).issues;
+    return [f.slipDate, csvCell(f.kind), csvCell(f.supplier), rec.items.length, n(f.subtotal), n(f.tax), n(f.total), n(signedTotal(rec)),
+      csvCell(issues.length ? 'ずれ: ' + issues.join(' / ') : 'OK'), csvCell(f.memo), csvCell(rec.createdBy), fmtDate(rec.createdAt), rec.rid].join(',');
+  });
+  download(`仕入台帳_伝票_${ym}_${todayCompact()}.csv`, '﻿' + [header.join(','), ...lines].join('\r\n'), 'text/csv');
+  toast('伝票CSVを書き出しました');
+}
+
+// 明細CSV: 1明細1行（品目ごとの集計・ピボット用）。返品の数量・金額はマイナスで出す
+function exportItemsCsv() {
+  const { ym, recs } = monthRecords();
+  if (!recs.length) { toast('この月には伝票がありません'); return; }
+  const header = ['伝票日付', '種別', '取引先'].concat(ITEM_FIELDS.map(c => c.label), ['ID']);
+  const lines = [];
+  recs.forEach(rec => {
+    const sign = rec.fields.kind === '返品' ? -1 : 1;
+    rec.items.forEach(r => {
+      const cells = [rec.fields.slipDate, csvCell(rec.fields.kind), csvCell(rec.fields.supplier)];
+      ITEM_FIELDS.forEach(c => {
+        const v = r[c.key];
+        if (c.type === 'yen' || c.type === 'int') cells.push(v == null ? '' : (c.key === 'unitPrice' ? v : v * sign));
+        else cells.push(csvCell(v));
+      });
+      cells.push(rec.rid);
+      lines.push(cells.join(','));
+    });
+  });
+  download(`仕入台帳_明細_${ym}_${todayCompact()}.csv`, '﻿' + [header.join(','), ...lines].join('\r\n'), 'text/csv');
+  toast('明細CSVを書き出しました');
+}
+
+function exportJson() {
+  const ym = document.getElementById('monthSelect').value;
+  const month = store.months[ym];
+  if (!month) { toast('この月のデータがありません'); return; }
+  download(`仕入台帳バックアップ_${ym}_${todayCompact()}.json`, JSON.stringify({ app: 'shiire', version: APP_VERSION, ym, month }, null, 2), 'application/json');
+  toast('バックアップを保存しました');
+}
+
+function importJson(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const j = JSON.parse(reader.result);
+      const months = {};
+      if (j && j.app === 'shiire' && j.ym && j.month) months[j.ym] = normalizeMonth(j.month);
+      else if (j && j.months) Object.keys(j.months).forEach(ym => { const m = normalizeMonth(j.months[ym]); if (m && /^\d{4}-\d{2}$/.test(ym)) months[ym] = m; });
+      const yms = Object.keys(months).filter(ym => months[ym]);
+      if (!yms.length) throw new Error('形式が違います');
+      if (!confirm(`${yms.map(ymLabel).join('、')} のデータをバックアップの内容で置き換えます。よろしいですか？\n（クラウド同期を利用中の場合、他の端末もこの内容に置き換わります）`)) return;
+      yms.forEach(ym => { months[ym].gen = Date.now(); store.months[ym] = months[ym]; extraMonths.add(ym); });
+      save();
+      renderAll();
+      toast('バックアップを復元しました');
+    } catch (e) {
+      toast('復元できません：ファイル形式が正しくありません');
+    }
+  };
+  reader.readAsText(file);
+}
+
+async function loadOldMonth() {
+  if (!syncConfigured()) { toast('クラウド同期が未設定です'); return; }
+  let list = [];
+  try {
+    const res = await fetch(`${SYNC_DB_URL}/shiire/${sync.storeId}/m.json?shallow=true`);
+    const obj = await res.json();
+    list = Object.keys(obj || {}).sort().reverse();
+  } catch (e) { toast('クラウドに接続できません'); return; }
+  const cand = list.filter(ym => !activeMonths().includes(ym));
+  if (!cand.length) { toast('読み込める古い月はありません'); return; }
+  const sel = document.getElementById('oldMonthSelect');
+  sel.innerHTML = cand.map(ym => `<option value="${ym}">${ymLabel(ym)}</option>`).join('');
+  document.getElementById('oldMonthBox').hidden = false;
+}
+
+async function loadOldMonthSelected() {
+  const ym = document.getElementById('oldMonthSelect').value;
+  if (!ym) return;
+  extraMonths.add(ym);
+  document.getElementById('oldMonthBox').hidden = true;
+  await syncNow();
+  renderAll();
+  toast(`${ymLabel(ym)} を読み込みました（この端末を閉じるまで表示）`);
+}
+
+// ===== クラウド同期（Firebase Realtime Database / REST のみ・SDK不使用） =====
+const sync = { storeId: null, status: 'unset', busy: false, pending: false, lastRev: {} };
+
+function syncConfigured() { return !!(SYNC_DB_URL && sync.storeId); }
+const monthUrl = (ym, suffix) => `${SYNC_DB_URL}/shiire/${sync.storeId}/m/${ym}${suffix || ''}.json`;
+
+async function sha256Hex(text) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+// パスコード→ストアID。DB にはこのIDのパスにだけ読み書きするため、パスコードを知らない人はデータの場所を推測できない
+function deriveStoreId(passcode) { return sha256Hex('shiire-store:' + passcode); }
+
+function loadSyncConfig() {
+  try {
+    const c = JSON.parse(localStorage.getItem(SYNC_KEY));
+    if (c && typeof c.storeId === 'string') sync.storeId = c.storeId;
+  } catch (e) {}
+}
+function saveSyncConfig() {
+  if (sync.storeId) localStorage.setItem(SYNC_KEY, JSON.stringify({ storeId: sync.storeId }));
+  else localStorage.removeItem(SYNC_KEY);
+}
+
+const SYNC_STATUS_LABELS = {
+  unset: '同期未設定', syncing: '⇅ 同期中…', ok: '⇅ 同期済み', offline: '⇅ オフライン', error: '⚠ 同期エラー',
+};
+function setSyncStatus(st) {
+  sync.status = st;
+  const chip = document.getElementById('syncChip');
+  chip.textContent = SYNC_STATUS_LABELS[st];
+  chip.className = 'sync-chip ' + st;
+  document.getElementById('storageNote').textContent = syncConfigured()
+    ? 'クラウド同期が有効です。台帳は同じパスコードを設定した全端末で共有されます。'
+    : 'データはこの端末のブラウザ（localStorage）にのみ保存されます。全員で共有するには、管理者が SETUP.md の手順で同期を有効にしてください。';
+}
+
+// 同期対象の月: 直近 ACTIVE_MONTHS か月 ＋ 手動で読み込んだ月
+function activeMonths() {
+  const set = new Set();
+  for (let i = 0; i < ACTIVE_MONTHS; i++) set.add(ymAdd(ymNow(), -i));
+  extraMonths.forEach(ym => set.add(ym));
+  return Array.from(set).sort();
+}
+
+// 同期有効時のみ、古い月を端末から捨てる（クラウドが正）
+function pruneLocalMonths() {
+  if (!syncConfigured()) return;
+  const keep = new Set(activeMonths());
+  const limit = ymAdd(ymNow(), -(LOCAL_MONTHS_MAX - 1));
+  Object.keys(store.months).forEach(ym => { if (!keep.has(ym) && ym < limit) delete store.months[ym]; });
+}
+
+function monthSig(m) { return JSON.stringify({ gen: m.gen, uids: m.events.map(e => e.uid).sort() }); }
+
+// 月ノードの統合。gen（世代）が異なればバックアップ復元なので新しい方が全取り。
+// 同じなら uid の和集合 → at 順に並べ直す（冪等・順序非依存）
+function mergeMonth(local, remote) {
+  if (!remote) return local;
+  if (!local) return remote;
+  if (local.gen !== remote.gen) return local.gen > remote.gen ? local : remote;
+  const byUid = {};
+  remote.events.concat(local.events).forEach(ev => { if (!byUid[ev.uid]) byUid[ev.uid] = ev; });
+  return { version: APP_VERSION, gen: local.gen, events: sortEvents(Object.values(byUid)) };
+}
+
+let syncDebounce = null;
+function scheduleSync() {
+  if (!syncConfigured()) return;
+  clearTimeout(syncDebounce);
+  syncDebounce = setTimeout(syncNow, 800);
+}
+
+async function syncMonth(ym) {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await fetch(monthUrl(ym), { headers: { 'X-Firebase-ETag': 'true' } });
+    if (!res.ok) throw new Error('GET ' + res.status);
+    const etag = res.headers.get('ETag');
+    const node = await res.json();
+    const remote = node && node.data ? normalizeMonth(node.data) : null;
+    const local = store.months[ym] || null;
+    if (!local && !remote) return false;
+    const merged = mergeMonth(local, remote);
+    const mergedSig = monthSig(merged);
+    const localSig = local ? monthSig(local) : null;
+    const remoteSig = remote ? monthSig(remote) : null;
+    let changed = false;
+    if (mergedSig !== localSig) { store.months[ym] = merged; saveLocalOnly(); changed = true; }
+    if (mergedSig !== remoteSig) {
+      // 注意: RTDB は print=silent と if-match の併用を 400 で拒否するため素の URL で PUT する
+      const rev = newUid();
+      const put = await fetch(monthUrl(ym), {
+        method: 'PUT',
+        headers: { 'if-match': etag, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ meta: { rev, at: Date.now() }, data: merged }),
+      });
+      if (put.status === 412) continue; // 他端末と競合 → 再取得してマージし直し
+      if (!put.ok) throw new Error('PUT ' + put.status);
+      sync.lastRev[ym] = rev;
+    } else {
+      sync.lastRev[ym] = node && node.meta ? node.meta.rev : null;
+    }
+    return changed;
+  }
+  throw new Error('conflict');
+}
+
+async function syncNow() {
+  if (!syncConfigured()) return;
+  if (sync.busy) { sync.pending = true; return; }
+  sync.busy = true;
+  setSyncStatus('syncing');
+  try {
+    const before = Object.keys(records).length;
+    let changed = false;
+    for (const ym of activeMonths()) {
+      if (await syncMonth(ym)) changed = true;
+    }
+    if (changed) {
+      pruneLocalMonths();
+      saveLocalOnly();
+      renderAll();
+      if (Object.keys(records).length > before) toast('他の端末の記録を取り込みました');
+    }
+    setSyncStatus('ok');
+  } catch (e) {
+    setSyncStatus(navigator.onLine === false ? 'offline' : 'error');
+  } finally {
+    sync.busy = false;
+    if (sync.pending) { sync.pending = false; syncNow(); }
+  }
+}
+
+// 60秒ごとの軽量ポーリング。各月の meta（数十バイト）だけ見て、変化があった時のみ本同期する
+async function pollTick() {
+  if (!syncConfigured() || sync.busy || document.hidden) return;
+  try {
+    for (const ym of activeMonths()) {
+      const res = await fetch(monthUrl(ym, '/meta'));
+      if (!res.ok) continue;
+      const meta = await res.json();
+      const rev = meta ? meta.rev : null;
+      if (rev !== (sync.lastRev[ym] || null)) { syncNow(); return; }
+    }
+  } catch (e) {}
+}
+
+function initSync() {
+  loadSyncConfig();
+  setSyncStatus(syncConfigured() ? 'syncing' : 'unset');
+  if (syncConfigured()) syncNow();
+  window.addEventListener('online', () => syncNow());
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) syncNow(); });
+  setInterval(pollTick, 60000);
+}
+
+function openSyncDialog() {
+  const connected = syncConfigured();
+  document.getElementById('syncMsg').textContent = '';
+  document.getElementById('syncSetupForm').hidden = connected || !SYNC_DB_URL;
+  document.getElementById('syncConnectedBox').hidden = !connected;
+  document.getElementById('syncNoServerBox').hidden = !!SYNC_DB_URL;
+  document.getElementById('syncOverlay').classList.add('show');
+}
+function closeSyncDialog() { document.getElementById('syncOverlay').classList.remove('show'); }
+
+async function connectSync() {
+  const msg = document.getElementById('syncMsg');
+  const passcode = document.getElementById('syncPasscode').value.trim();
+  if (passcode.length < 10) { msg.textContent = 'パスコードは10文字以上にしてください'; return; }
+  msg.textContent = '接続中…';
+  const storeId = await deriveStoreId(passcode);
+  try {
+    const res = await fetch(`${SYNC_DB_URL}/shiire/${storeId}/m.json?shallow=true`);
+    if (!res.ok) throw new Error('GET ' + res.status);
+    const remoteMonths = await res.json();
+    const localCount = Object.values(store.months).reduce((s, m) => s + m.events.length, 0);
+    if (remoteMonths && localCount > 0 &&
+        !confirm('クラウドに既存の台帳があります。この端末の記録と統合しますが、よろしいですか？')) {
+      msg.textContent = '';
+      return;
+    }
+    sync.storeId = storeId;
+    sync.lastRev = {};
+    saveSyncConfig();
+    document.getElementById('syncPasscode').value = '';
+    closeSyncDialog();
+    await syncNow();
+    renderSettings();
+    toast('クラウド同期を開始しました');
+  } catch (e) {
+    msg.textContent = '接続できません。通信環境を確認してください';
+  }
+}
+
+function disconnectSync() {
+  if (!confirm('この端末の同期を解除します。記録は消えません（この端末に残ります）。よろしいですか？')) return;
+  sync.storeId = null; sync.lastRev = {};
+  saveSyncConfig();
+  setSyncStatus('unset');
+  closeSyncDialog();
+  renderSettings();
+  toast('同期を解除しました');
+}
+
+// ===== 描画・タブ・初期化 =====
+function renderAll() {
+  records = buildRecords(store.months);
+  renderHeader();
+  renderList();
+  renderMonthly();
+  renderSettings();
+  if (detail.rid && !detail.editing && document.getElementById('detailOverlay').classList.contains('show')) renderDetail();
+}
+
+function activateTab(name) {
+  document.querySelectorAll('nav.tabs button').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
+  document.querySelectorAll('section.tab').forEach(s => s.classList.toggle('active', s.id === 'tab-' + name));
+  scrollTo(0, 0);
+}
+document.querySelectorAll('nav.tabs button').forEach(btn => btn.addEventListener('click', () => activateTab(btn.dataset.tab)));
+
+document.getElementById('btnParse').addEventListener('click', () => {
+  const text = document.getElementById('ocrText').value;
+  if (!text.trim()) { toast('読み取った文字を貼り付けてください'); return; }
+  applyOcrText(text);
+});
+document.getElementById('btnManual').addEventListener('click', () => { resetCapture(); openManualForm(); });
+document.getElementById('copyShortcutUrl').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText(shortcutUrl()); toast('URL をコピーしました'); }
+  catch (e) { document.getElementById('shortcutUrl').select(); toast('URL を選択しました。コピーしてください'); }
+});
+window.addEventListener('hashchange', takeOcrFromHash);
+document.getElementById('btnSave').addEventListener('click', saveNewRecord);
+document.getElementById('btnCancelForm').addEventListener('click', () => { if (confirm('入力内容を破棄しますか？')) resetCapture(); });
+document.getElementById('searchBox').addEventListener('input', e => { listQuery = e.target.value; renderList(); });
+document.getElementById('syncChip').addEventListener('click', openSyncDialog);
+document.getElementById('syncSettings').addEventListener('click', openSyncDialog);
+document.getElementById('syncClose').addEventListener('click', closeSyncDialog);
+document.getElementById('syncConnect').addEventListener('click', connectSync);
+document.getElementById('syncDisconnect').addEventListener('click', disconnectSync);
+document.getElementById('operatorChip').addEventListener('click', openOperatorDialog);
+document.getElementById('operatorSettings').addEventListener('click', openOperatorDialog);
+document.getElementById('operatorClose').addEventListener('click', closeOperatorDialog);
+document.getElementById('csvSlips').addEventListener('click', exportSlipsCsv);
+document.getElementById('csvItems').addEventListener('click', exportItemsCsv);
+document.getElementById('sumMonth').addEventListener('change', renderMonthly);
+document.getElementById('jsonExport').addEventListener('click', exportJson);
+document.getElementById('jsonImportBtn').addEventListener('click', () => document.getElementById('jsonImportFile').click());
+document.getElementById('jsonImportFile').addEventListener('change', e => { if (e.target.files[0]) importJson(e.target.files[0]); e.target.value = ''; });
+document.getElementById('loadMonthBtn').addEventListener('click', loadOldMonth);
+document.getElementById('oldMonthLoad').addEventListener('click', loadOldMonthSelected);
+document.getElementById('detailOverlay').addEventListener('click', e => { if (e.target.id === 'detailOverlay' && !detail.editing) closeDetail(); });
+
+updateClock();
+setInterval(updateClock, 1000);
+renderOperatorChip();
+renderAll();
+initSync();
+if (location.hash.startsWith('#ocr=')) takeOcrFromHash();
+else if (!operator) openOperatorDialog();
+</script>
+</body>
+</html>

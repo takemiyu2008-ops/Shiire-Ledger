@@ -1,0 +1,15 @@
+{
+  "rules": {
+    "shiire": {
+      "$storeId": {
+        ".read": true,
+        ".write": true,
+        "m": {
+          "$ym": {
+            ".validate": "$ym.matches(/^[0-9]{4}-[0-9]{2}$/)"
+          }
+        }
+      }
+    }
+  }
+}
