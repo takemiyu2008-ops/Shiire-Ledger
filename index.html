@@ -49,6 +49,7 @@ label.field{display:block; font-size:12px; color:var(--sub); margin:12px 0 4px;}
   background:var(--accent); color:#fff; font-size:16px; font-weight:600; cursor:pointer; margin-top:14px;
 }
 .btn:active{opacity:.85;}
+a.btn{text-align:center; text-decoration:none;}
 .btn:disabled{opacity:.5; cursor:default;}
 [hidden]{display:none !important;}
 .btn.secondary{background:#eef1f5; color:var(--ink); font-weight:500; font-size:14px; padding:11px;}
@@ -209,7 +210,7 @@ label.field{display:block; font-size:12px; color:var(--sub); margin:12px 0 4px;}
 </header>
 <nav class="tabs">
   <button data-tab="list" class="active">一覧</button>
-  <button data-tab="capture">入力</button>
+  <button data-tab="capture">撮影</button>
   <button data-tab="monthly">月次</button>
   <button data-tab="settings">設定</button>
 </nav>
@@ -230,7 +231,8 @@ label.field{display:block; font-size:12px; color:var(--sub); margin:12px 0 4px;}
 <section class="tab" id="tab-capture">
   <div class="card" id="captureCard">
     <h2>納品書・返品伝票を読み取る</h2>
-    <p class="hint">iPhone のショートカット「仕入伝票」で撮ると、iPhone の中で文字にしてここへ届きます（写真は iPhone の外に出ません）。計算がすべて合えばそのまま登録し、合わない行があれば黄色で示します。</p>
+    <a class="btn" id="btnShoot" href="#">📷 伝票を撮る</a>
+    <p class="hint">押すと iPhone のショートカット「仕入伝票」が動いてカメラが開きます。撮った写真は iPhone の中で文字にしてここへ届きます（写真は iPhone の外に出ません）。計算がすべて合えばそのまま登録し、合わない行があれば黄色で示します。<br>動かないときは、ショートカット「仕入伝票」がこの iPhone に入っているか確かめてください（作り方は SETUP.md）。</p>
     <label class="field" for="ocrText">読み取った文字</label>
     <textarea id="ocrText" rows="5" placeholder="iPhone の写真の「テキスト認識表示」で全部を選んでコピーし、ここに貼り付けてもよい"></textarea>
     <button class="btn" id="btnParse">この文字から入力欄を作る</button>
@@ -390,6 +392,8 @@ const TAX_RATE = 0.08;          // 野菜・果物は軽減税率。検算で使
 const CONF_WARN = 0.7;          // これ未満の confidence は「要確認」
 const ACTIVE_MONTHS = 3;        // 同期対象にする直近の月数
 const LOCAL_MONTHS_MAX = 6;     // 端末に保持する月数（同期有効時のみ古い月を捨てる）
+// 撮影ボタンで動かす iPhone のショートカットの名前（ショートカット App で付けた名前と一字一句同じにする）
+const SHORTCUT_NAME = '仕入伝票';
 // ショートカットから届いた文字で、検算がすべて合い要確認も無ければ確認画面を出さずに登録する
 const AUTO_SAVE_WHEN_CLEAN = true;
 
@@ -1074,7 +1078,7 @@ function renderForm(container, { initial, read }) {
   };
 }
 
-// ===== 入力タブ =====
+// ===== 撮影タブ =====
 const capture = { read: null, form: null, model: null };
 
 function resetCapture() {
@@ -1858,6 +1862,7 @@ function activateTab(name) {
 }
 document.querySelectorAll('nav.tabs button').forEach(btn => btn.addEventListener('click', () => activateTab(btn.dataset.tab)));
 
+document.getElementById('btnShoot').href = 'shortcuts://run-shortcut?name=' + encodeURIComponent(SHORTCUT_NAME);
 document.getElementById('btnParse').addEventListener('click', () => {
   const text = document.getElementById('ocrText').value;
   if (!text.trim()) { toast('読み取った文字を貼り付けてください'); return; }

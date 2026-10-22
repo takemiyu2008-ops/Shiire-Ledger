@@ -322,6 +322,9 @@ def test_local_regression(browser, base_url):
     page.on('request', lambda r: firebase_requests.append(r.url) if 'firebasedatabase.app' in r.url else None)
 
     check('チップが「同期未設定」', page.text_content('#syncChip') == '同期未設定')
+    check('撮影タブがある', page.locator('nav.tabs button[data-tab="capture"]').text_content() == '撮影')
+    check('撮影ボタンはショートカット「仕入伝票」を呼ぶ',
+          page.get_attribute('#btnShoot', 'href') == 'shortcuts://run-shortcut?name=%E4%BB%95%E5%85%A5%E4%BC%9D%E7%A5%A8', page.get_attribute('#btnShoot', 'href'))
     check('起動時は一覧タブが空', 'まだ伝票がありません' in page.text_content('#recordList'))
 
     manual_entry(page, 'テスト青果')

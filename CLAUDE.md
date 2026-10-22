@@ -16,7 +16,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `tests/test_sync.py` … Playwright E2E（モック RTDB）。`samples/` があれば本物の認識結果でも解析を照合
 - `samples/` … git 管理外。実際の納品書・返品伝票の写真、文字認識の出力 `ocr_*.txt`、正解 `truth.json`
 
-タブは「一覧／入力／月次／設定」。ヘッダーに今月（伝票日付の月）の差し引き支払額と伝票枚数、同期チップ、操作者チップ。
+タブは「一覧／撮影／月次／設定」。ヘッダーに今月（伝票日付の月）の差し引き支払額と伝票枚数、同期チップ、操作者チップ。
 
 ## アーキテクチャ
 
@@ -27,7 +27,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `options` 付きの項目は、読み取り結果が選択肢の語を含むかで振り分ける（「納品書」→納品、「返品伝票」→返品）
 
 ### 文字認識テキストの解析（`parseOcrText`）
-- 入口: ショートカットが開く `…/index.html#ocr=<URL エンコードした文字>`（`takeOcrFromHash`。読んだらハッシュを消す）と、「入力」タブへの貼り付け
+- 入口: ショートカットが開く `…/index.html#ocr=<URL エンコードした文字>`（`takeOcrFromHash`。読んだらハッシュを消す）と、「撮影」タブへの貼り付け。撮影タブの「📷 伝票を撮る」は `shortcuts://run-shortcut?name=仕入伝票` でショートカットを呼ぶ（名前は `SHORTCUT_NAME`）
 - Apple の文字認識は**列ごと**に返す（品名の列 → 数量の列 → 単価の列 → 金額の列。10/1 の実物で確認）。1行ずつの形も扱う
 - 文字の種類で振り分ける: 品名（かな・漢字で数字なし）／数量（1〜4桁の整数）／¥金額（¥0 は空行として捨てる）／数字を含むが読めない語（逆さ読みの「0CZ夫」等）は「欠けた金額」null／英字1〜3字は産地の記号（行を特定できないので入れない）／ラベル・住所・電話・宛名は捨てる
 - 小計・税・合計は「a＋b＝c」になる3つ組を後ろから探す。上部の「合計金額」は明細から除く
