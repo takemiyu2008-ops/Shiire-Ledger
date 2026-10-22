@@ -258,6 +258,7 @@ a.btn{text-align:center; text-decoration:none;}
     <select id="sumMonth"></select>
     <div id="sumBody"></div>
     <button class="btn" id="printMonthly" style="margin-top:14px;">🖨 A4横で印刷</button>
+    <p class="hint" id="printNote"></p>
     <div class="data-btns" style="margin-top:8px;">
       <button class="btn secondary" id="csvSlips">伝票CSV</button>
       <button class="btn secondary" id="csvItems">明細CSV</button>
@@ -1414,6 +1415,7 @@ function renderMonthly() {
   } else {
     html += '<p class="hint" style="margin-top:12px;">この月の伝票はありません。</p>';
   }
+  renderPrintNote(ym);
   if (unknown.length) html += `<div class="checkbox ng">⚠ 種別または合計が未入力で、支払額に入っていない伝票が ${unknown.length}枚あります。一覧から開いて直してください。</div>`;
   if (issues) html += `<div class="checkbox ng">⚠ 検算ずれのある伝票が ${issues}枚あります（一覧の「検算ずれ」で確認できます）。金額は伝票の合計欄の値で集計しています。</div>`;
   box.innerHTML = html;
@@ -1565,6 +1567,27 @@ const csvCell = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
 function monthRecords() {
   const ym = document.getElementById('sumMonth').value;
   return { ym, recs: sortedRecords().reverse().filter(r => r.status === 'active' && r.fields.slipDate && ymOf(r.fields.slipDate) === ym) };
+}
+
+// ホーム画面に追加したアプリとして開いているか（iPhone ではここから印刷画面が開かないことがある）
+function isStandaloneApp() {
+  return window.navigator.standalone === true || (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches);
+}
+
+// 印刷ボタンの下に、印刷する伝票の枚数と、印刷できないときの理由を出す（押しても何も起きないように見えるのを防ぐ）
+function renderPrintNote(ym) {
+  const inMonth = Object.values(records).filter(r => r.fields.slipDate && ymOf(r.fields.slipDate) === ym);
+  const active = inMonth.filter(r => r.status === 'active').length;
+  const voided = inMonth.length - active;
+  const btn = document.getElementById('printMonthly');
+  const lines = [];
+  if (active) lines.push(`印刷する伝票: ${active}枚${voided ? `（取消した ${voided}枚は含めません）` : ''}`);
+  else if (voided) lines.push(`この月の伝票は ${voided}枚ともすべて取消のため、印刷するものがありません。`);
+  else lines.push(syncConfigured() ? 'この月の伝票はまだありません。' : 'この端末には伝票がありません。ほかの端末の伝票を印刷するには、設定タブの「クラウド同期設定」で店のパスコードを入れてください。');
+  if (active && isStandaloneApp()) lines.push('ホーム画面のアプリからは印刷画面が開かないことがあります。開かないときは Safari で開いて印刷してください。');
+  btn.disabled = !active;
+  document.getElementById('printNote').textContent = lines.join('\n');
+  document.getElementById('printNote').style.whiteSpace = 'pre-line';
 }
 
 // 月次のまとめを A4 横で印刷する。伝票は日付の古い順、同じ日は 納品 → 返品 → 登録順

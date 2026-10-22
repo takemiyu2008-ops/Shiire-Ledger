@@ -371,6 +371,9 @@ def test_local_regression(browser, base_url):
     check('撮影ボタンはショートカット「仕入伝票」を呼ぶ',
           page.get_attribute('#btnShoot', 'href') == 'shortcuts://run-shortcut?name=%E4%BB%95%E5%85%A5%E4%BC%9D%E7%A5%A8', page.get_attribute('#btnShoot', 'href'))
     check('起動時は一覧タブが空', 'まだ伝票がありません' in page.text_content('#recordList'))
+    page.click('nav.tabs button[data-tab="monthly"]')
+    check('伝票が無いと印刷ボタンは押せず、理由が出る',
+          page.is_disabled('#printMonthly') and 'この端末には伝票がありません' in page.text_content('#printNote'), page.text_content('#printNote'))
 
     manual_entry(page, 'テスト青果')
     check('手入力の伝票が一覧に出る', 'テスト青果' in page.text_content('#recordList'))
@@ -515,6 +518,7 @@ def test_ocr_flow(browser, base_url):
     sb = page.text_content('#sumBody')
     check('月次: 3132−1814＝1,318円（取消した二重登録は除く）', '1,318円' in sb and '納品 1枚' in sb and '返品 1枚' in sb, sb[:200])
     check('月次: 「有限会社 テスト青果」と「(有)テスト青果」が同じ取引先', page.locator('#sumBody .sum-table tbody tr').count() == 1)
+    check('印刷する枚数が出る（取消は含めない）', '印刷する伝票: 2枚（取消した 1枚は含めません）' in page.text_content('#printNote'), page.text_content('#printNote'))
     page.evaluate('window.__printed = 0; window.print = () => { window.__printed++; }; 0')
     page.click('#printMonthly')
     pa = page.text_content('#printArea')
